@@ -1,132 +1,119 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# Absensi Karyawan WFH API
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+NestJS runtime foundation using Express, MySQL, TypeORM, and private local storage. Business routes, authentication flows, migrations, and file-content delivery are implemented in later tasks. This task starts the application and checks its dependencies; `/` returns 404 and no account is created on startup.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+The shared API source is [contracts](../contracts/README.md). Work and review status live in [the task index](../api-server-tasks/index.md); the selected architecture is in [the technical design](../api-server-tasks/api-server.technical.md).
 
-## Description
+## Runtime and dependencies
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+Use **Node 26.13.0** (`.nvmrc`) and **npm 11.20.0**. Direct dependency versions are exact and the lockfile is committed with approved changes. The engine check prevents accidentally installing with another Node major. No global Node installation is changed by this project.
 
-## Project setup
-
-```bash
-$ npm install
+```sh
+nvm install
+nvm use
+npm ci
 ```
 
-## Compile and run the project
+The selected stack is NestJS 12.3.3, `@nestjs/typeorm` 12.0.3, TypeORM 1.1.2, `mysql2` 3.24.6, MySQL 8.4.6 LTS, TypeScript 6.0.3, Jest 30.5.2, and ts-jest 29.4.15. The real-MySQL integration suite verifies this combination rather than relying only on declared peer compatibility. TypeORM 1.x uses mysql2 directly; its removed `connectorPackage` option is not used.
 
-```bash
-# development
-$ npm run start
+JWT/class-validator/class-transformer/Argon2 dependencies are installed for the subsequent modules. npm 11 install-script approvals are pinned for Argon2 and the Nest CLI watcher so clean installs reproduce their native setup. Configured JWT key format is an HS256 secret of at least 32 bytes; the signature test does not implement login or establish the production key-rotation policy. Browser allowlists are validated independently but their HTTP CORS/CSRF wiring belongs to task 004.
 
-# watch mode
-$ npm run start:dev
+## Configure local development
 
-# production mode
-$ npm run start:prod
+```sh
+cp .env.example .env
 ```
 
-## Run tests
+Replace the database password placeholder and generate a separate JWT secret. Do not reuse a real employee password:
 
-```bash
-# unit tests
-$ npm run test
-
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
+```sh
+node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
 ```
 
-## Deployment
+Secrets and `.env.*` files are ignored by Git; `.env.example` contains placeholders only. Explicit process environment variables override `.env`. Configuration uses Node's built-in env parser and is validated when Nest constructs the runtime module. `NODE_ENV=test` never implicitly loads the developer's `.env`.
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+Run Node.js directly and connect to a native MySQL 8.4 service at `127.0.0.1:3306` (or the host/port you configure). The API does not start or administer the database service. Use a dedicated development database and application user.
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+Connect with your MySQL administrator account and prepare the database/user, substituting a real local password before executing:
 
-```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
+```sh
+mysql --host=127.0.0.1 --port=3306 --user=root --password
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
-
-## Observability
-
-In production applications, observability is essential for understanding how your system behaves, detecting issues early, and maintaining reliable performance.
-
-[NestJS Observe](https://observe.nestjs.com) automatically instruments your NestJS application, giving you deep visibility into your system with minimal setup:
-
-- **Distributed tracing:** Follow requests across services and understand how they flow through your system.
-- **Waterfall analysis:** Visualize request execution and identify slow operations, bottlenecks, and unexpected delays.
-- **Performance analysis:** Analyze application performance in real time and quickly pinpoint areas that need optimization.
-- **Metrics:** Track key application and infrastructure metrics to understand system health and performance trends.
-- **Logging:** Centralize and correlate logs with traces and other telemetry to make debugging easier.
-- **Error tracking:** Detect errors quickly and investigate their root causes with the surrounding context.
-- **SLA monitoring:** Track service-level objectives and identify when your application is approaching or exceeding defined thresholds.
-- **Alarms and alerts:** Set up alerts for critical errors, performance degradation, SLA violations, and other anomalies so your team can react quickly.
-
-To add it to this project, run this and approve the code it prints at [observe.nestjs.com/link](https://observe.nestjs.com/link) - signing up for free if you have no account:
-
-```bash
-$ npx @nestjs/observe link
+```sql
+CREATE DATABASE absensi_wfh CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
+CREATE USER 'absensi_wfh'@'127.0.0.1' IDENTIFIED BY 'REPLACE_WITH_A_LOCAL_DATABASE_PASSWORD';
+GRANT ALL PRIVILEGES ON absensi_wfh.* TO 'absensi_wfh'@'127.0.0.1';
 ```
 
-It installs `@nestjs/observe`, wires it into `AppModule` and `main.ts`, and writes the app key and secret into `.env`, which every `nest start` script (`start`, `start:dev`, `start:debug`) then loads. In production, set `OBSERVE_APP_KEY` and `OBSERVE_APP_SECRET` in the environment instead.
+Set the same application username/password in `.env`. Administrator credentials are used only for manual database setup; the API requires only `DB_USERNAME` and `DB_PASSWORD`. MySQL stores its data in the native service's data directory; the API never initializes or removes that directory. See [MySQL account setup](https://dev.mysql.com/doc/refman/8.4/en/creating-accounts.html) for account/privilege details.
 
-Or do it by hand:
+Configure your development MySQL service for UTC, using its server configuration and normal service restart procedure:
 
-```bash
-$ npm install @nestjs/observe
+```ini
+[mysqld]
+default-time-zone = '+00:00'
+character-set-server = utf8mb4
+collation-server = utf8mb4_0900_ai_ci
 ```
 
-Then follow the [setup guide](https://docs.nestjs.com/observability/sdk) - it takes a single import and an app key.
+Verify the server/session setting with `SELECT @@global.time_zone, @@session.time_zone;`. Newly created connections should use `+00:00`; TypeORM also maps timestamps as UTC. The [MySQL timezone documentation](https://dev.mysql.com/doc/refman/8.4/en/time-zone-support.html) describes the server/session distinction. No server configuration or existing database is changed automatically by this project.
 
-The free plan needs no payment details and covers 300,000 events a month. You can also browse the [live demo](https://www.observe-demo.nestjs.com/dashboard) first - the whole dashboard over a busy service's data, with nothing to install.
+```sh
+npm run start:dev
+```
 
-## Resources
+## Environment settings
 
-Check out a few resources that may come in handy when working with NestJS:
+| Settings | Behavior |
+| --- | --- |
+| `NODE_ENV` | `development`, `test`, or `production`; defaults to development |
+| `HOST`, `PORT` | Bind IP/localhost and port; defaults to `127.0.0.1:3000` |
+| `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USERNAME`, `DB_PASSWORD` | Required connection identity/secret; port defaults to 3306; database name uses letters/digits/underscores |
+| `DB_POOL_SIZE`, `DB_CONNECT_TIMEOUT_MS` | Defaults to 10 connections and a 10-second connection timeout |
+| `JWT_ALGORITHM`, `JWT_SECRET`, `JWT_ISSUER`, `JWT_AUDIENCE` | HS256 only in this foundation; real non-placeholder secret required; issuer/audience required |
+| `JWT_ACCESS_TTL_SECONDS` | Default 28800 (8 hours), the accepted planning baseline |
+| `CORS_ORIGINS`, `CSRF_TRUSTED_ORIGINS` | Separate comma-delimited origin allowlists; no wildcard/path/credential/query; HTTPS only in production; empty means no cross-origin trust |
+| `STORAGE_ROOT` | Required private directory outside the application directory; relative paths resolve from `api-server/`; created with mode 0700 if absent and checked for read/write/traversal access |
+| `MAX_FILE_BYTES`, `MAX_CONCURRENT_UPLOADS` | Defaults to 5 MiB and four uploads; bytes cannot exceed the contract's 5 MiB ceiling; upload enforcement comes with the HTTP/storage tasks |
+| `BUSINESS_TOKEN_TTL_SECONDS` | Default/max 600 seconds; token implementation comes in task 005 |
+| `IDEMPOTENCY_RETENTION_SECONDS` | Default/minimum 86400 seconds; operation retention implementation comes in task 005 |
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Auto-instrument your application with [NestJS Observe](https://observe.nestjs.com). Distributed tracing, metrics, and logging made easy. Error tracking and performance monitoring for your NestJS applications.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+Password policy defaults are 15–128 characters. Environment policy changes must be reflected in the shared contract and published policy before release. Config validation reports setting names and constraints, never rejected values. Database/storage startup errors are sanitized; use a MySQL client and local operational logs to diagnose the actual service, rather than enabling SQL/credential logging.
 
-## Support
+Local evidence belongs on a persistent private disk, outside public/source directories. The example uses `../.local/absensi-wfh/files`. Keep that directory out of source control and PWA/static hosting. Production disk topology, backup/retention, TLS/proxy configuration, and scale are separate operational decisions.
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+## Build and run
 
-## Stay in touch
+```sh
+npm run build
+npm run start:prod
+```
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+The build emits `dist/main.js`; production start executes that file. Startup validates configuration, connects to MySQL without retrying indefinitely, checks/creates the private root, and then listens. Shutdown hooks close Nest and its connection pool. Invalid configuration or an unavailable dependency fails before a successful listen; startup never runs schema synchronization, migrations, registration, or account seeds.
 
-## License
+Schema migrations and their CLI scripts are task 003. No migration command is available in the runtime foundation. `synchronize` and `migrationsRun` are explicitly false in every environment; do not work around the missing schema with automatic synchronization.
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+## Verification
+
+```sh
+npm run lint
+npm test -- --runInBand
+npm run test:e2e -- --runInBand
+```
+
+Unit tests check parsing, safe origin/secret handling, policy bounds, and redacted validation failures. E2e tests replace only the database provider, use an isolated temporary storage directory and injectable clock, and check that no business/bootstrap route exists. They do not establish MySQL compatibility.
+
+For the explicit integration suite, prepare a **dedicated empty MySQL 8.4 database** and put its `DB_*` settings, a test-only JWT secret/issuer/audience, and a private `STORAGE_ROOT` in ignored `.env.test.local`, with `NODE_ENV=test`. This suite never implicitly uses `.env`. It creates a connection-local temporary table, checks rollback/commit and UTC/date-only values, starts the actual Nest application, and verifies JWT plus native Argon2id imports. It does not create an employee or a business table.
+
+```sh
+npm run test:integration
+```
+
+The integration runner loads `.env.test.local` if present; CI can supply equivalent process environment variables instead. Do not point it at a production or populated business database. Task 002 verification used an isolated native MySQL 8.4.6 instance and direct Node processes; test data and temporary credentials were removed afterward.
+
+Shared contract validation uses the separate Python environment described in [contracts/README.md](../contracts/README.md). Runtime foundation tests do not claim the 50 business operations are implemented.
+
+## Dependency audit notes
+
+The unused starter `@nestjs/mau` deployment dependency and its placeholder deploy command were removed, eliminating the observed high-severity findings in that toolchain. Nest CLI was updated to 12.0.12. The current production dependency audit reports zero advisories. The full audit still reports 20 development-tool findings (4 low, 16 moderate), principally in Jest transitive glob/minimatch/deepmerge dependencies; the registry currently suggests incompatible downgrades rather than a compatible patched Jest release. No forced downgrades or unverified major dependency overrides were applied. Review compatible fixes when upstream releases them; do not use the test toolchain with untrusted input.
