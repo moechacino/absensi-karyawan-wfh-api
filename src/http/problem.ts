@@ -92,7 +92,16 @@ export class ProblemFilter implements ExceptionFilter {
             ? ['FILE_TOO_LARGE', 'File too large']
             : (defaults[status] ?? ['INTERNAL_ERROR', 'Internal server error']);
     if (status >= 500) this.logger.error({ code, requestId });
-    if (status === 401) response.setHeader('WWW-Authenticate', 'Bearer');
+    if (status === 401) {
+      const invalidToken =
+        error instanceof ProblemException &&
+        ['TOKEN_INVALID', 'TOKEN_EXPIRED'].includes(error.code);
+      response.setHeader(
+        'WWW-Authenticate',
+        invalidToken ? 'Bearer error="invalid_token"' : 'Bearer',
+      );
+    }
+
     const options =
       error instanceof ProblemException ? error.publicOptions : {};
     if (

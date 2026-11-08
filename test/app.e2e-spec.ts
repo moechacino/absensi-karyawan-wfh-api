@@ -48,12 +48,12 @@ describe('runtime foundation (e2e)', () => {
     await app.init();
   });
 
-  it('starts with injectable runtime services without publishing business/bootstrap routes', async () => {
+  it('starts with injectable runtime services with validated auth routes and no bootstrap route', async () => {
     await request(app.getHttpServer()).get('/').expect(404);
     await request(app.getHttpServer())
       .post('/api/v1/auth/login')
       .send({})
-      .expect(404);
+      .expect(400);
     expect(app.get(Clock).now().toISOString()).toBe('2026-11-07T00:00:00.000Z');
   });
 
