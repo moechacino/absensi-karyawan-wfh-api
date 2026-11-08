@@ -7,6 +7,9 @@ import { getDataSourceToken } from '@nestjs/typeorm';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { configureHttp } from '../src/http/configure-http';
+import { RUNTIME_CONFIG } from '../src/runtime/runtime.config';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Clock } from '../src/runtime/clock';
 
 describe('runtime foundation (e2e)', () => {
@@ -38,6 +41,10 @@ describe('runtime foundation (e2e)', () => {
       .compile();
 
     app = moduleFixture.createNestApplication();
+    configureHttp(
+      app as unknown as NestExpressApplication,
+      app.get(RUNTIME_CONFIG),
+    );
     await app.init();
   });
 

@@ -1,3 +1,5 @@
+import { configureHttp } from './http/configure-http';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { RUNTIME_CONFIG } from './runtime/runtime.config';
@@ -8,9 +10,12 @@ import {
 } from './runtime/runtime.errors';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, { abortOnError: false });
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    abortOnError: false,
+  });
   try {
     const config = app.get<RuntimeConfig>(RUNTIME_CONFIG);
+    configureHttp(app, config);
     app.enableShutdownHooks();
     await app.listen(config.app.port, config.app.host);
   } catch (error) {

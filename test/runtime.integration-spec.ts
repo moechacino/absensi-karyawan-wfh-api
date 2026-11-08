@@ -1,5 +1,6 @@
 import { NestFactory } from '@nestjs/core';
-import type { INestApplication } from '@nestjs/common';
+import type { NestExpressApplication } from '@nestjs/platform-express';
+import { configureHttp } from '../src/http/configure-http';
 import { JwtService } from '@nestjs/jwt';
 import { DataSource } from 'typeorm';
 import { hash, verify, argon2id } from 'argon2';
@@ -10,15 +11,16 @@ import { RUNTIME_CONFIG } from '../src/runtime/runtime.config';
 import type { RuntimeConfig } from '../src/runtime/runtime.config';
 
 describe('pinned runtime with real MySQL (explicit integration suite)', () => {
-  let app: INestApplication;
+  let app: NestExpressApplication;
 
   beforeAll(async () => {
     const migrated = await prepareTestDatabase();
     await migrated.destroy();
-    app = await NestFactory.create(AppModule, {
+    app = await NestFactory.create<NestExpressApplication>(AppModule, {
       logger: false,
       abortOnError: false,
     });
+    configureHttp(app, app.get<RuntimeConfig>(RUNTIME_CONFIG));
     await app.listen(0, '127.0.0.1');
   });
 
