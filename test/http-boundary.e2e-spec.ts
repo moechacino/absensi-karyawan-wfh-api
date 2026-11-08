@@ -98,6 +98,15 @@ class BoundaryController {
   @Post('forbidden') forbidden() {
     throw new ForbiddenException('private-role-marker');
   }
+  @Post('in-progress')
+  inProgress() {
+    throw new ProblemException(
+      409,
+      'OPERATION_IN_PROGRESS',
+      'Operation in progress',
+      { retryAfter: 1 },
+    );
+  }
   @Post('conflict') conflict() {
     throw new ProblemException(409, 'VERSION_CONFLICT', 'Version conflict', {
       details: { expectedVersion: 1, actualVersion: 2 },
@@ -453,6 +462,11 @@ describe('shared production HTTP setup', () => {
       .post(base + '/rate')
       .expect(429);
     expect(rate.headers['retry-after']).toBe('30');
+    const pending = await request(app.getHttpServer())
+      .post(base + '/in-progress')
+      .expect(409);
+    expect(pending.headers['retry-after']).toBe('1');
+    expect(pending.body.code).toBe('OPERATION_IN_PROGRESS');
     const logging = jest
       .spyOn(Logger.prototype, 'error')
       .mockImplementation(() => undefined);

@@ -28,7 +28,8 @@
     "migration:run": "npm run typeorm -- migration:run -d dist/database/cli-data-source.js",
     "premigration:revert": "npm run build",
     "migration:revert": "npm run typeorm -- migration:revert -d dist/database/cli-data-source.js",
-    "migration:create": "npm run typeorm -- migration:create"
+    "migration:create": "npm run typeorm -- migration:create",
+    "test:unit": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --config ./jest.config.ts --runInBand"
   },
   "dependencies": {
     "@nestjs/common": "12.3.3",

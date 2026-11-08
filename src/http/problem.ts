@@ -96,7 +96,7 @@ export class ProblemFilter implements ExceptionFilter {
     const options =
       error instanceof ProblemException ? error.publicOptions : {};
     if (
-      status === 429 &&
+      [409, 429, 503].includes(status) &&
       Number.isSafeInteger(options.retryAfter) &&
       options.retryAfter! > 0
     )
