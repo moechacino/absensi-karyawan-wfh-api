@@ -3,8 +3,10 @@ import { DataSource } from 'typeorm';
 import type { DataSourceOptions } from 'typeorm';
 import type { RuntimeConfig } from '../runtime/runtime.config';
 import { RuntimeDependencyError } from '../runtime/runtime.errors';
+import { DATABASE_ENTITIES } from './entities';
+import { InitialSchema1794096000001 } from './migrations/1794096000001-initial-schema';
 
-export function databaseOptions(config: RuntimeConfig): TypeOrmModuleOptions {
+export function dataSourceOptions(config: RuntimeConfig): DataSourceOptions {
   return {
     type: 'mysql',
     host: config.database.host,
@@ -20,11 +22,20 @@ export function databaseOptions(config: RuntimeConfig): TypeOrmModuleOptions {
     poolSize: config.database.poolSize,
     connectTimeout: config.database.connectTimeoutMs,
     multipleStatements: false,
-    entities: [],
-    autoLoadEntities: true,
+    entities: DATABASE_ENTITIES,
+    migrations: [InitialSchema1794096000001],
+    migrationsTableName: 'schema_migrations',
+    migrationsTransactionMode: 'none',
     synchronize: false,
     migrationsRun: false,
     logging: false,
+  };
+}
+
+export function databaseOptions(config: RuntimeConfig): TypeOrmModuleOptions {
+  return {
+    ...dataSourceOptions(config),
+    autoLoadEntities: false,
     retryAttempts: 1,
     verboseRetryLog: false,
   };
@@ -36,7 +47,8 @@ export async function connectDatabase(
   if (!options) throw new Error('Database configuration is unavailable.');
   const source = new DataSource(options);
   try {
-    return await source.initialize();
+    await source.initialize();
+    return source;
   } catch {
     // Discard the driver error: it may include connection/user information.
     if (source.isInitialized) await source.destroy().catch(() => undefined);

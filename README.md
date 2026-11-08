@@ -1,6 +1,6 @@
 # Absensi Karyawan WFH API
 
-NestJS runtime foundation using Express, MySQL, TypeORM, and private local storage. Business routes, authentication flows, migrations, and file-content delivery are implemented in later tasks. This task starts the application and checks its dependencies; `/` returns 404 and no account is created on startup.
+NestJS runtime foundation using Express, MySQL, TypeORM, and private local storage. Active draft 0.7.0 defers time off, balances/ledger, reconciliation, and PDF attachments. Explicit TypeORM-generated schema migrations are available; business routes, authentication flows, and file-content delivery remain later tasks. The foundation starts the application after reviewed migrations and checks its dependencies; `/` returns 404 and no account is created on startup.
 
 The shared API source is [contracts](../contracts/README.md). Work and review status live in [the task index](../api-server-tasks/index.md); the selected architecture is in [the technical design](../api-server-tasks/api-server.technical.md).
 
@@ -60,6 +60,8 @@ collation-server = utf8mb4_0900_ai_ci
 Verify the server/session setting with `SELECT @@global.time_zone, @@session.time_zone;`. Newly created connections should use `+00:00`; TypeORM also maps timestamps as UTC. The [MySQL timezone documentation](https://dev.mysql.com/doc/refman/8.4/en/time-zone-support.html) describes the server/session distinction. No server configuration or existing database is changed automatically by this project.
 
 ```sh
+npm run migration:show
+npm run migration:run
 npm run start:dev
 ```
 
@@ -76,7 +78,7 @@ npm run start:dev
 | `CORS_ORIGINS`, `CSRF_TRUSTED_ORIGINS` | Separate comma-delimited origin allowlists; no wildcard/path/credential/query; HTTPS only in production; empty means no cross-origin trust |
 | `STORAGE_ROOT` | Required private directory outside the application directory; relative paths resolve from `api-server/`; created with mode 0700 if absent and checked for read/write/traversal access |
 | `MAX_FILE_BYTES`, `MAX_CONCURRENT_UPLOADS` | Defaults to 5 MiB and four uploads; bytes cannot exceed the contract's 5 MiB ceiling; upload enforcement comes with the HTTP/storage tasks |
-| `BUSINESS_TOKEN_TTL_SECONDS` | Default/max 600 seconds; token implementation comes in task 005 |
+| `DEFERRED_BUSINESS_TOKEN_TTL_SECONDS` | Default/max 600 seconds; token implementation comes in task 005 |
 | `IDEMPOTENCY_RETENTION_SECONDS` | Default/minimum 86400 seconds; operation retention implementation comes in task 005 |
 
 Password policy defaults are 15–128 characters. Environment policy changes must be reflected in the shared contract and published policy before release. Config validation reports setting names and constraints, never rejected values. Database/storage startup errors are sanitized; use a MySQL client and local operational logs to diagnose the actual service, rather than enabling SQL/credential logging.
@@ -92,7 +94,7 @@ npm run start:prod
 
 The build emits `dist/main.js`; production start executes that file. Startup validates configuration, connects to MySQL without retrying indefinitely, checks/creates the private root, and then listens. Shutdown hooks close Nest and its connection pool. Invalid configuration or an unavailable dependency fails before a successful listen; startup never runs schema synchronization, migrations, registration, or account seeds.
 
-Schema migrations and their CLI scripts are task 003. No migration command is available in the runtime foundation. `synchronize` and `migrationsRun` are explicitly false in every environment; do not work around the missing schema with automatic synchronization.
+Task 003 uses the official TypeORM CLI: `migration:generate`, `migration:create`, `migration:show`, `migration:run`, and guarded `migration:revert`. Generate/show/run/revert build current source first. Update entities, generate/review a migration, register its class, then apply it. The database guide includes exact commands and the manual additions needed for CHECKs/triggers/data changes. Run only one migration process at a time; standard CLI output includes SQL and diagnostics. Startup checks connectivity without validating migration state and never creates or changes tables; run reviewed migrations explicitly before startup. `synchronize` and `migrationsRun` stay false. Read the [database guide](src/database/README.md) for the 11-table active schema, migration permissions, append-only protections, empty-baseline rollback, and partial-DDL recovery. Migrations run explicitly before starting the API.
 
 ## Verification
 
@@ -104,7 +106,7 @@ npm run test:e2e -- --runInBand
 
 Unit tests check parsing, safe origin/secret handling, policy bounds, and redacted validation failures. E2e tests replace only the database provider, use an isolated temporary storage directory and injectable clock, and check that no business/bootstrap route exists. They do not establish MySQL compatibility.
 
-For the explicit integration suite, prepare a **dedicated empty MySQL 8.4 database** and put its `DB_*` settings, a test-only JWT secret/issuer/audience, and a private `STORAGE_ROOT` in ignored `.env.test.local`, with `NODE_ENV=test`. This suite never implicitly uses `.env`. It creates a connection-local temporary table, checks rollback/commit and UTC/date-only values, starts the actual Nest application, and verifies JWT plus native Argon2id imports. It does not create an employee or a business table.
+For the explicit integration suite, prepare a **dedicated empty MySQL 8.4 database with a name ending in `_test`** and put its `DB_*` settings, a test-only JWT secret/issuer/audience, and a private `STORAGE_ROOT` in ignored `.env.test.local`, with `NODE_ENV=test`. This suite never implicitly uses `.env`. It explicitly applies the test schema, verifies constraints and standard migration behavior, creates fictional rows inside rolled-back transactions, starts the actual Nest application, and verifies JWT plus native Argon2id imports. It does not create real accounts or change your existing service. The database guide describes migration privileges and test isolation.
 
 ```sh
 npm run test:integration
@@ -117,3 +119,5 @@ Shared contract validation uses the separate Python environment described in [co
 ## Dependency audit notes
 
 The unused starter `@nestjs/mau` deployment dependency and its placeholder deploy command were removed, eliminating the observed high-severity findings in that toolchain. Nest CLI was updated to 12.0.12. The current production dependency audit reports zero advisories. The full audit still reports 20 development-tool findings (4 low, 16 moderate), principally in Jest transitive glob/minimatch/deepmerge dependencies; the registry currently suggests incompatible downgrades rather than a compatible patched Jest release. No forced downgrades or unverified major dependency overrides were applied. Review compatible fixes when upstream releases them; do not use the test toolchain with untrusted input.
+
+The current foundation uses a fixed 1-hour stateless JWT configuration, UUID employees, credentials on employees and one normalized unique email column. Calendar locking and idempotency remain; audit/revocation/HR-guard/counter/preview-token/upload-tracking/deletion-job infrastructure is deferred. File workflows remain feature tasks; failed writes must commit no SQL changes, with direct cleanup on SQL failure and manual recovery for crash/deletion leftovers.

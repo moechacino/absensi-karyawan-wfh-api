@@ -27,7 +27,7 @@ describe('runtime configuration', () => {
       'http://localhost:5173',
     ]);
     expect(config.storage.root).toBe(resolve('/application/private-files'));
-    expect(config.jwt.accessTtlSeconds).toBe(28800);
+    expect(config.jwt.accessTtlSeconds).toBe(3600);
     expect(config.policy.idempotencyRetentionSeconds).toBe(86400);
     expect(Object.isFrozen(config)).toBe(true);
     expect(env.CORS_ORIGINS).toContain('WEB.example');
@@ -107,6 +107,12 @@ describe('runtime configuration', () => {
         IDEMPOTENCY_RETENTION_SECONDS: '86399',
       }),
     ).toThrow('IDEMPOTENCY_RETENTION_SECONDS');
+    expect(() =>
+      parseRuntimeConfig({
+        ...validEnvironment,
+        JWT_ACCESS_TTL_SECONDS: '28800',
+      }),
+    ).toThrow('JWT_ACCESS_TTL_SECONDS');
     expect(() =>
       parseRuntimeConfig({ ...validEnvironment, MAX_FILE_BYTES: '5242881' }),
     ).toThrow('MAX_FILE_BYTES');

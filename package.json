@@ -18,7 +18,17 @@
     "test:cov": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --coverage",
     "test:debug": "node --inspect-brk --experimental-vm-modules -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --config ./test/jest-e2e.json",
-    "test:integration": "node --env-file-if-exists=.env.test.local --experimental-vm-modules ./node_modules/jest/bin/jest.js --config ./test/jest-integration.json --runInBand"
+    "test:integration": "node --env-file-if-exists=.env.test.local --experimental-vm-modules ./node_modules/jest/bin/jest.js --config ./test/jest-integration.json --runInBand",
+    "typeorm": "node --env-file-if-exists=.env ./node_modules/typeorm/cli.js",
+    "premigration:generate": "npm run build",
+    "migration:generate": "npm run typeorm -- migration:generate -d dist/database/cli-data-source.js",
+    "premigration:show": "npm run build",
+    "migration:show": "npm run typeorm -- migration:show -d dist/database/cli-data-source.js",
+    "premigration:run": "npm run build",
+    "migration:run": "npm run typeorm -- migration:run -d dist/database/cli-data-source.js",
+    "premigration:revert": "npm run build",
+    "migration:revert": "npm run typeorm -- migration:revert -d dist/database/cli-data-source.js",
+    "migration:create": "npm run typeorm -- migration:create"
   },
   "dependencies": {
     "@nestjs/common": "12.3.3",

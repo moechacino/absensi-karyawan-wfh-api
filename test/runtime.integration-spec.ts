@@ -5,6 +5,7 @@ import { DataSource } from 'typeorm';
 import { hash, verify, argon2id } from 'argon2';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
+import { prepareTestDatabase } from './mysql-fixture';
 import { RUNTIME_CONFIG } from '../src/runtime/runtime.config';
 import type { RuntimeConfig } from '../src/runtime/runtime.config';
 
@@ -12,6 +13,8 @@ describe('pinned runtime with real MySQL (explicit integration suite)', () => {
   let app: INestApplication;
 
   beforeAll(async () => {
+    const migrated = await prepareTestDatabase();
+    await migrated.destroy();
     app = await NestFactory.create(AppModule, {
       logger: false,
       abortOnError: false,
@@ -23,7 +26,7 @@ describe('pinned runtime with real MySQL (explicit integration suite)', () => {
     await app?.close();
   });
 
-  it('starts the actual application without tables/accounts/bootstrap routes', async () => {
+  it('starts the migrated application without employee accounts/bootstrap routes', async () => {
     await request(app.getHttpServer()).get('/').expect(404);
     const source = app.get(DataSource);
     const [version] = await source.query(
@@ -32,7 +35,7 @@ describe('pinned runtime with real MySQL (explicit integration suite)', () => {
     expect(version.version).toMatch(/^8\.4\./);
     expect(version.timeZone).toBe('+00:00');
     expect(source.options.synchronize).toBe(false);
-    expect(await source.query('SHOW TABLES')).toEqual([]);
+    expect(await source.getRepository('EmployeeEntity').count()).toBe(0);
   });
 
   it('uses mysql2 transactions and preserves date-only/UTC values', async () => {
@@ -79,12 +82,25 @@ describe('pinned runtime with real MySQL (explicit integration suite)', () => {
         expiresIn: config.jwt.accessTtlSeconds,
       },
     );
-    const result = await jwt.verifyAsync<{ sub: string }>(token, {
+    const result = await jwt.verifyAsync<{
+      sub: string;
+      iat: number;
+      exp: number;
+    }>(token, {
       algorithms: ['HS256'],
       issuer: config.jwt.issuer,
       audience: config.jwt.audience,
     });
     expect(result.sub).toBe('runtime-check');
+    expect(result.exp - result.iat).toBe(3600);
+    await expect(
+      jwt.verifyAsync(token, {
+        algorithms: ['HS256'],
+        issuer: config.jwt.issuer,
+        audience: config.jwt.audience,
+        clockTimestamp: result.exp,
+      }),
+    ).rejects.toThrow('jwt expired');
     await expect(
       jwt.verifyAsync(token, {
         algorithms: ['HS256'],

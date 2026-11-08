@@ -42,7 +42,6 @@ export interface RuntimeConfig {
   readonly policy: Readonly<{
     passwordMinLength: 15;
     passwordMaxLength: 128;
-    businessTokenTtlSeconds: number;
     idempotencyRetentionSeconds: number;
   }>;
 }
@@ -160,7 +159,7 @@ export function parseRuntimeConfig(
       secret: secret('JWT_SECRET', 32),
       issuer: text('JWT_ISSUER'),
       audience: text('JWT_AUDIENCE'),
-      accessTtlSeconds: integer('JWT_ACCESS_TTL_SECONDS', 28800, 300, 86400),
+      accessTtlSeconds: integer('JWT_ACCESS_TTL_SECONDS', 3600, 3600, 3600),
     }),
     browser: Object.freeze({
       corsOrigins: origins('CORS_ORIGINS'),
@@ -174,12 +173,6 @@ export function parseRuntimeConfig(
     policy: Object.freeze({
       passwordMinLength: 15,
       passwordMaxLength: 128,
-      businessTokenTtlSeconds: integer(
-        'BUSINESS_TOKEN_TTL_SECONDS',
-        600,
-        1,
-        600,
-      ),
       idempotencyRetentionSeconds: integer(
         'IDEMPOTENCY_RETENTION_SECONDS',
         86400,
