@@ -78,7 +78,6 @@ describe('SQL idempotency coordination', () => {
     await source.manager.delete(PositionEntity, { id: ids.position });
     await source.manager.delete(DivisionEntity, { id: ids.division });
   });
-  const authorized = async () => {};
 
   function command(key = randomUUID()) {
     return {
@@ -108,11 +107,7 @@ describe('SQL idempotency coordination', () => {
   it('commits once and replays the original status/result after a lost response or changed current version', async () => {
     const request = command();
     let mutations = 0;
-    let authorizations = 0;
     const handlers = {
-      authorize: async () => {
-        authorizations++;
-      },
       perform: async (manager: EntityManager) => {
         mutations++;
         return increment(manager);
@@ -128,7 +123,6 @@ describe('SQL idempotency coordination', () => {
     expect(replay).toEqual({ ...first, replayed: true });
     expect(await version()).toBe(2);
     expect(mutations).toBe(1);
-    expect(authorizations).toBe(2);
     const stored = await source.manager.findOneByOrFail(
       IdempotencyOperationEntity,
       { actorId: ids.employee },
@@ -147,7 +141,7 @@ describe('SQL idempotency coordination', () => {
       input: { expectedVersion: 1, name: 'Fixture' },
       files: [digestFile('photo', Buffer.from('first bytes'))],
     };
-    const handlers = { authorize: authorized, perform: increment };
+    const handlers = { perform: increment };
     await service.execute(request, handlers);
     expect(
       (
@@ -162,7 +156,7 @@ describe('SQL idempotency coordination', () => {
         { ...request, input: { expectedVersion: 2, name: 'Fixture' } },
         handlers,
       ),
-    ).rejects.toMatchObject({ code: 'IDEMPOTENCY_KEY_REUSED' });
+    ).rejects.toMatchObject({ status: 422, code: 'IDEMPOTENCY_KEY_REUSED' });
     await expect(
       service.execute(
         {
@@ -171,10 +165,10 @@ describe('SQL idempotency coordination', () => {
         },
         handlers,
       ),
-    ).rejects.toMatchObject({ code: 'IDEMPOTENCY_KEY_REUSED' });
+    ).rejects.toMatchObject({ status: 422, code: 'IDEMPOTENCY_KEY_REUSED' });
     await expect(
       service.execute({ ...request, resourceId: randomUUID() }, handlers),
-    ).rejects.toMatchObject({ code: 'IDEMPOTENCY_KEY_REUSED' });
+    ).rejects.toMatchObject({ status: 422, code: 'IDEMPOTENCY_KEY_REUSED' });
     expect(
       (
         await service.execute(
@@ -199,7 +193,6 @@ describe('SQL idempotency coordination', () => {
     const entered = gate();
     const release = gate();
     const work = service.execute(request, {
-      authorize: authorized,
       perform: async (manager) => {
         await increment(manager);
         entered.resolve();
@@ -216,11 +209,17 @@ describe('SQL idempotency coordination', () => {
         loadRuntimeConfig(),
       );
       await expect(
-        other.execute(request, { authorize: authorized, perform: increment }),
+        other.execute(request, { perform: increment }),
       ).rejects.toMatchObject({
         code: 'OPERATION_IN_PROGRESS',
         publicOptions: { retryAfter: 1 },
       });
+      await expect(
+        other.execute(
+          { ...request, input: { name: 'Changed while processing' } },
+          { perform: increment },
+        ),
+      ).rejects.toMatchObject({ status: 409, code: 'OPERATION_IN_PROGRESS' });
     } finally {
       release.resolve();
     }
@@ -228,7 +227,6 @@ describe('SQL idempotency coordination', () => {
     expect(
       (
         await service.execute(request, {
-          authorize: authorized,
           perform: increment,
         })
       ).replayed,
@@ -240,7 +238,6 @@ describe('SQL idempotency coordination', () => {
     const request = command();
     await expect(
       service.execute(request, {
-        authorize: authorized,
         perform: async (manager) => {
           await increment(manager);
           throw new Error('failure before commit');
@@ -253,7 +250,6 @@ describe('SQL idempotency coordination', () => {
       service.execute(
         { ...request, operation: 'createEmployee' },
         {
-          authorize: authorized,
           perform: async (manager) => {
             await increment(manager);
             return { status: 201, body: { employeeId: ids.otherEmployee } };
@@ -269,30 +265,11 @@ describe('SQL idempotency coordination', () => {
     expect(
       (
         await service.execute(request, {
-          authorize: authorized,
           perform: increment,
         })
       ).replayed,
     ).toBe(false);
     expect(await version()).toBe(2);
-  });
-
-  it('reauthorizes before exposing a stored result and never repeats mutation on unauthorized replay', async () => {
-    const request = command();
-    await service.execute(request, {
-      authorize: authorized,
-      perform: increment,
-    });
-    await expect(
-      service.execute(request, {
-        authorize: async () => {
-          throw new ProblemException(403, 'FORBIDDEN', 'Forbidden');
-        },
-        perform: increment,
-      }),
-    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
-    expect(await version()).toBe(2);
-    expect(await source.manager.count(IdempotencyOperationEntity)).toBe(1);
   });
 
   it('stores only an employeeId receipt and reconstructs credentials, returning unavailable after self change', async () => {
@@ -305,7 +282,6 @@ describe('SQL idempotency coordination', () => {
     };
     let creates = 0;
     const handlers = {
-      authorize: authorized,
       perform: async (manager: EntityManager) => {
         creates++;
         await manager.insert(EmployeeEntity, {
@@ -377,7 +353,6 @@ describe('SQL idempotency coordination', () => {
     const request = command();
     await expect(
       service.execute(request, {
-        authorize: authorized,
         perform: async (manager) => {
           await increment(manager);
           return {
@@ -392,19 +367,19 @@ describe('SQL idempotency coordination', () => {
     await expect(
       service.execute(
         { ...request, key: 'not-a-uuid' },
-        { authorize: authorized, perform: increment },
+        { perform: increment },
       ),
     ).rejects.toMatchObject({ code: 'INVALID_IDEMPOTENCY_KEY' });
     await expect(
       service.execute(
         { ...request, operation: 'login' as never },
-        { authorize: authorized, perform: increment },
+        { perform: increment },
       ),
     ).rejects.toMatchObject({ code: 'INVALID_IDEMPOTENCY_KEY' });
     await expect(
       service.execute(
         { ...request, operation: 'checkIn' },
-        { authorize: authorized, perform: increment },
+        { perform: increment },
       ),
     ).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
   });
@@ -412,7 +387,6 @@ describe('SQL idempotency coordination', () => {
   it('expires receipts in bounded batches without bypassing regular version validation', async () => {
     const request = command();
     const handlers = {
-      authorize: authorized,
       perform: async (manager: EntityManager) => {
         const changed = await manager.update(
           DivisionEntity,
@@ -448,7 +422,6 @@ describe('SQL idempotency coordination', () => {
 
   it('skips cleanup rows locked by a replay and preserves in-progress records', async () => {
     await service.execute(command(), {
-      authorize: authorized,
       perform: increment,
     });
     const pending = {
@@ -480,7 +453,7 @@ describe('SQL idempotency coordination', () => {
     expect(await source.manager.count(IdempotencyOperationEntity)).toBe(1);
   });
 
-  it('recovers an expired pending claim only when its row is unlocked', async () => {
+  it('rejects IN_PROGRESS claims after lease/retention expiry and never removes or reprocesses them', async () => {
     const request = command();
     const pending = {
       id: randomUUID(),
@@ -495,7 +468,7 @@ describe('SQL idempotency coordination', () => {
     };
     await source.manager.insert(IdempotencyOperationEntity, pending);
     await expect(
-      service.execute(request, { authorize: authorized, perform: increment }),
+      service.execute(request, { perform: increment }),
     ).rejects.toMatchObject({ code: 'OPERATION_IN_PROGRESS' });
     clock.value = new Date(clock.value.getTime() + 1000);
     const runner = source.createQueryRunner();
@@ -507,21 +480,27 @@ describe('SQL idempotency coordination', () => {
         [pending.id],
       );
       await expect(
-        service.execute(request, { authorize: authorized, perform: increment }),
+        service.execute(request, { perform: increment }),
       ).rejects.toMatchObject({ code: 'OPERATION_IN_PROGRESS' });
     } finally {
       await runner.rollbackTransaction();
       await runner.release();
     }
+    await expect(
+      service.execute(request, { perform: increment }),
+    ).rejects.toMatchObject({ code: 'OPERATION_IN_PROGRESS' });
+    clock.value = new Date(pending.expiresAt.getTime() + 1);
+    await expect(
+      service.execute(request, { perform: increment }),
+    ).rejects.toMatchObject({ code: 'OPERATION_IN_PROGRESS' });
     expect(
       (
-        await service.execute(request, {
-          authorize: authorized,
-          perform: increment,
+        await source.manager.findOneByOrFail(IdempotencyOperationEntity, {
+          id: pending.id,
         })
-      ).replayed,
-    ).toBe(false);
-    expect(await version()).toBe(2);
+      ).state,
+    ).toBe('IN_PROGRESS');
+    expect(await version()).toBe(1);
   });
 
   it('retries actual MySQL deadlocks with stable receipt time and commits each operation once', async () => {
@@ -533,7 +512,6 @@ describe('SQL idempotency coordination', () => {
       service.execute(
         { ...command(), receivedAt: new Date('2026-11-08T01:02:03.456Z') },
         {
-          authorize: authorized,
           perform: async (manager, context) => {
             attempts[index]++;
             times[index].push(context.receivedAt.toISOString());
@@ -596,7 +574,6 @@ describe('SQL idempotency coordination', () => {
     const times: number[] = [];
     await expect(
       service.execute(command(), {
-        authorize: authorized,
         perform: async (manager, context) => {
           attempts++;
           times.push(context.receivedAt.getTime());
@@ -626,7 +603,6 @@ describe('SQL idempotency coordination', () => {
       expect(
         (
           await limited.execute(request, {
-            authorize: authorized,
             perform: increment,
           })
         ).replayed,
@@ -634,7 +610,6 @@ describe('SQL idempotency coordination', () => {
       expect(
         (
           await limited.execute(request, {
-            authorize: authorized,
             perform: increment,
           })
         ).replayed,

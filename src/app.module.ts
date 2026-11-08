@@ -1,3 +1,4 @@
+import { OrganizationModule } from './organization/organization.module';
 import { FileModule } from './files/file.module';
 import { AuthModule } from './auth/auth.module';
 import { IdempotencyModule } from './idempotency/idempotency.module';
@@ -14,6 +15,7 @@ import { RuntimeModule } from './runtime/runtime.module';
     IdempotencyModule,
     AuthModule,
     FileModule,
+    OrganizationModule,
   ],
 })
 export class AppModule {}

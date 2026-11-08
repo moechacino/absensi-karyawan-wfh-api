@@ -1,42 +1,10 @@
-import {
-  ClassSerializerInterceptor,
-  NotFoundException,
-  ValidationPipe,
-} from '@nestjs/common';
-import type { ValidationError } from 'class-validator';
+import { ClassSerializerInterceptor, NotFoundException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import type { Request, Response, NextFunction } from 'express';
 import type { RuntimeConfig } from '../runtime/runtime.config';
 import { ProblemException, ProblemFilter, responseHeaders } from './problem';
-import type { FieldError } from './problem';
-
-function fieldErrors(errors: ValidationError[], parent = ''): FieldError[] {
-  return errors.flatMap((error) => {
-    const property = /^[A-Za-z_][A-Za-z0-9_]{0,63}$|^\d{1,6}$/.test(
-      error.property,
-    )
-      ? error.property
-      : 'field';
-    const field = parent ? `${parent}.${property}` : property;
-    return [
-      ...(Object.keys(error.constraints ?? {}).length
-        ? [
-            {
-              field,
-              code: error.constraints?.whitelistValidation
-                ? 'UNKNOWN_FIELD'
-                : 'INVALID_VALUE',
-              message: error.constraints?.whitelistValidation
-                ? 'This field is not allowed.'
-                : 'Use the documented field format.',
-            },
-          ]
-        : []),
-      ...fieldErrors(error.children ?? [], field),
-    ];
-  });
-}
+import { httpValidationPipe } from './validation';
 
 export function configureHttp(
   app: NestExpressApplication,
@@ -51,20 +19,7 @@ export function configureHttp(
     next();
   });
   app.useGlobalFilters(new ProblemFilter());
-  app.useGlobalPipes(
-    new ValidationPipe({
-      transform: true,
-      whitelist: true,
-      forbidNonWhitelisted: true,
-      forbidUnknownValues: true,
-      transformOptions: { enableImplicitConversion: false },
-      validationError: { target: false, value: false },
-      exceptionFactory: (errors) =>
-        new ProblemException(400, 'VALIDATION_FAILED', 'Validation failed', {
-          errors: fieldErrors(errors),
-        }),
-    }),
-  );
+  app.useGlobalPipes(httpValidationPipe());
   app.useGlobalInterceptors(new ClassSerializerInterceptor(app.get(Reflector)));
   app.enableCors({
     origin: [...config.browser.corsOrigins],
@@ -81,6 +36,7 @@ export function configureHttp(
       'WWW-Authenticate',
       'Retry-After',
       'Content-Disposition',
+      'Idempotency-Replayed',
     ],
     optionsSuccessStatus: 204,
   });

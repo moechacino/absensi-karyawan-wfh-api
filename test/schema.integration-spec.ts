@@ -33,6 +33,7 @@ describe('explicit MySQL schema and persistence invariants', () => {
 
   it('reverts an empty baseline, connects without schema checks or writes, and reapplies once', async () => {
     await source.undoLastMigration();
+    await source.undoLastMigration();
     const before = await source.query('SHOW TABLES');
     expect(await source.showMigrations()).toBe(true);
     const connection = await connectDatabase(
@@ -42,7 +43,10 @@ describe('explicit MySQL schema and persistence invariants', () => {
     expect(await source.query('SHOW TABLES')).toEqual(before);
     expect(
       (await source.runMigrations()).map((migration) => migration.name),
-    ).toEqual(['InitialSchema1794096000001']);
+    ).toEqual([
+      'InitialSchema1794096000001',
+      'OrganizationCodeLength1794127860128',
+    ]);
     expect(
       (await source.runMigrations()).map((migration) => migration.name),
     ).toEqual([]);
@@ -185,17 +189,69 @@ describe('explicit MySQL schema and persistence invariants', () => {
       } finally {
         await runner.release();
       }
-      await expect(source.undoLastMigration()).rejects.toThrow(
-        'Refusing to revert a used schema',
-      );
+      const downRunner = source.createQueryRunner();
+
+      try {
+        await expect(
+          new InitialSchema1794096000001().down(downRunner),
+        ).rejects.toThrow('Refusing to revert a used schema');
+      } finally {
+        await downRunner.release();
+      }
+
       expect(
         await source.getRepository(DivisionEntity).findOneBy({ id }),
       ).not.toBeNull();
       expect(await source.query('SELECT name FROM schema_migrations')).toEqual([
         { name: 'InitialSchema1794096000001' },
+        { name: 'OrganizationCodeLength1794127860128' },
       ]);
     } finally {
       await source.manager.delete(DivisionEntity, { id });
+    }
+  });
+
+  it('preserves existing codes on migration and refuses rollback that would truncate data', async () => {
+    const division = randomUUID();
+    const position = randomUUID();
+    await source.manager.insert(DivisionEntity, {
+      id: division,
+      code: 'D' + division.slice(0, 8),
+      name: 'Migration fixture',
+    });
+    await source.manager.insert(PositionEntity, {
+      id: position,
+      divisionId: division,
+      code: 'P' + position.slice(0, 8),
+      name: 'Migration fixture',
+    });
+
+    try {
+      await source.undoLastMigration();
+      await source.runMigrations();
+      expect(
+        (await source.manager.findOneByOrFail(DivisionEntity, { id: division }))
+          .code,
+      ).toBe('D' + division.slice(0, 8));
+      expect(
+        (await source.manager.findOneByOrFail(PositionEntity, { id: position }))
+          .code,
+      ).toBe('P' + position.slice(0, 8));
+      await source.manager.update(
+        PositionEntity,
+        { id: position },
+        { code: 'P'.repeat(40) },
+      );
+      await expect(source.undoLastMigration()).rejects.toThrow(
+        'Refusing to truncate organization codes',
+      );
+      expect(
+        (await source.manager.findOneByOrFail(PositionEntity, { id: position }))
+          .code,
+      ).toBe('P'.repeat(40));
+    } finally {
+      await source.manager.delete(PositionEntity, { id: position });
+      await source.manager.delete(DivisionEntity, { id: division });
     }
   });
 

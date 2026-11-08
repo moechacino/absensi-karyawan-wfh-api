@@ -45,13 +45,47 @@ export class IdempotencyRepository {
       await runner.connect();
       await this.acquireLock(runner, lock);
       locked = true;
-      return await this.withRetries(runner, work);
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          await runner.startTransaction('READ COMMITTED');
+          const result = await work(runner.manager);
+          await runner.commitTransaction();
+
+          return result;
+        } catch (error) {
+          if (runner.isTransactionActive) {
+            await runner.rollbackTransaction();
+          }
+
+          if (mysqlErrorCode(error) === 'ER_LOCK_NOWAIT') {
+            throw inProgress();
+          }
+
+          if (!isRetryableTransactionError(error)) {
+            throw error;
+          }
+
+          if (attempt === 2) {
+            throw new ProblemException(
+              503,
+              'OPERATION_RETRY_EXHAUSTED',
+              'Operation temporarily busy',
+              {
+                detail: 'Retry with the same idempotency key.',
+                retryAfter: 1,
+              },
+            );
+          }
+
+          await new Promise((resolve) =>
+            setTimeout(resolve, 5 + Math.floor(Math.random() * 20)),
+          );
+        }
+      }
+
+      throw new Error('Operation did not complete.');
     } finally {
       try {
-        if (runner.isTransactionActive) {
-          await runner.rollbackTransaction();
-        }
-
         if (locked) {
           await runner.query('SELECT RELEASE_LOCK(?)', [lock]);
         }
@@ -80,47 +114,10 @@ export class IdempotencyRepository {
     }
   }
 
-  private async withRetries<T>(
-    runner: QueryRunner,
-    work: (manager: EntityManager) => Promise<T>,
-  ): Promise<T> {
-    for (let attempt = 0; attempt < 3; attempt++) {
-      await runner.startTransaction('READ COMMITTED');
-      try {
-        const result = await work(runner.manager);
-        await runner.commitTransaction();
-        return result;
-      } catch (error) {
-        if (runner.isTransactionActive) {
-          await runner.rollbackTransaction();
-        }
-
-        if (mysqlErrorCode(error) === 'ER_LOCK_NOWAIT') {
-          throw inProgress();
-        }
-
-        if (!isRetryableTransactionError(error)) {
-          throw error;
-        }
-
-        if (attempt === 2) {
-          throw new ProblemException(
-            503,
-            'OPERATION_RETRY_EXHAUSTED',
-            'Operation temporarily busy',
-            { detail: 'Retry with the same idempotency key.', retryAfter: 1 },
-          );
-        }
-
-        await new Promise((resolve) =>
-          setTimeout(resolve, 5 + Math.floor(Math.random() * 20)),
-        );
-      }
-    }
-    throw new Error('Operation did not complete.');
-  }
-
-  findForUpdate(manager: EntityManager, request: PreparedRequest) {
+  findForUpdate(
+    manager: EntityManager,
+    request: PreparedRequest,
+  ): Promise<IdempotencyOperationEntity | null> {
     return manager.findOne(IdempotencyOperationEntity, {
       where: {
         actorId: request.actorId,
@@ -131,7 +128,6 @@ export class IdempotencyRepository {
         id: true,
         fingerprint: true,
         state: true,
-        leaseExpiresAt: true,
         expiresAt: true,
         httpStatus: true,
         resourceId: true,

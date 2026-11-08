@@ -34,7 +34,6 @@ export interface StoredResult {
 }
 
 export interface IdempotencyHandlers {
-  authorize(manager: EntityManager): Promise<void>;
   perform(
     manager: EntityManager,
     context: { receivedAt: Date },

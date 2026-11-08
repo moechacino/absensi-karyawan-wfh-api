@@ -72,7 +72,6 @@ describe('IdempotencyService', () => {
       resourceId,
     };
     const handlers = {
-      authorize: jest.fn<Promise<void>, [EntityManager]>().mockResolvedValue(),
       perform: jest
         .fn<Promise<StoredResult>, Parameters<IdempotencyHandlers['perform']>>()
         .mockResolvedValue(result),
@@ -101,7 +100,7 @@ describe('IdempotencyService', () => {
     });
   }
 
-  it('authorizes and saves a fresh public result with the same transaction manager', async () => {
+  it('saves a fresh public result with the same transaction manager', async () => {
     const { service, repository, command, handlers, result } = setup();
     command.actorId = actorId.toUpperCase();
     command.key = key.toUpperCase();
@@ -111,7 +110,6 @@ describe('IdempotencyService', () => {
       body: result.body,
       replayed: false,
     });
-    expect(handlers.authorize).toHaveBeenCalledWith(manager);
     expect(handlers.perform).toHaveBeenCalledWith(manager, { receivedAt: now });
     expect(repository.saveCompleted).toHaveBeenCalledWith(
       manager,
@@ -131,7 +129,6 @@ describe('IdempotencyService', () => {
       body: result.body,
       replayed: true,
     });
-    expect(handlers.authorize).toHaveBeenCalledWith(manager);
     expect(handlers.perform).not.toHaveBeenCalled();
     expect(repository.saveCompleted).not.toHaveBeenCalled();
   });
@@ -142,22 +139,11 @@ describe('IdempotencyService', () => {
     command.input.name = 'Different division';
 
     await expect(service.execute(command, handlers)).rejects.toMatchObject({
+      status: 422,
       code: 'IDEMPOTENCY_KEY_REUSED',
     });
     expect(handlers.perform).not.toHaveBeenCalled();
     expect(repository.remove).not.toHaveBeenCalled();
-    expect(repository.saveCompleted).not.toHaveBeenCalled();
-  });
-
-  it('rejects unauthorized replay before reading or returning cached data', async () => {
-    const { service, repository, command, handlers, result } = setup();
-    repository.findForUpdate.mockResolvedValue(completed(command, result));
-    const denied = new ProblemException(403, 'FORBIDDEN', 'Forbidden');
-    handlers.authorize.mockRejectedValue(denied);
-
-    await expect(service.execute(command, handlers)).rejects.toBe(denied);
-    expect(repository.findForUpdate).not.toHaveBeenCalled();
-    expect(handlers.perform).not.toHaveBeenCalled();
     expect(repository.saveCompleted).not.toHaveBeenCalled();
   });
 
@@ -200,19 +186,20 @@ describe('IdempotencyService', () => {
     },
   );
 
-  it('recovers an expired pending receipt after repository row ownership is granted', async () => {
+  it('rejects expired IN_PROGRESS receipts without deleting or restarting work', async () => {
     const { service, repository, command, handlers, result } = setup();
     const previous = Object.assign(completed(command, result), {
       state: 'IN_PROGRESS' as const,
       leaseExpiresAt: new Date(now),
+      expiresAt: new Date(now),
     }) as IdempotencyOperationEntity;
     repository.findForUpdate.mockResolvedValue(previous);
 
-    await expect(service.execute(command, handlers)).resolves.toMatchObject({
-      replayed: false,
+    await expect(service.execute(command, handlers)).rejects.toMatchObject({
+      code: 'OPERATION_IN_PROGRESS',
     });
-    expect(repository.remove).toHaveBeenCalledWith(manager, previous.id);
-    expect(handlers.perform).toHaveBeenCalledTimes(1);
+    expect(repository.remove).not.toHaveBeenCalled();
+    expect(handlers.perform).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -322,7 +309,6 @@ describe('IdempotencyService', () => {
         service.execute({ ...command, ...override }, handlers),
       ).rejects.toBeInstanceOf(ProblemException);
       expect(repository.runExclusive).not.toHaveBeenCalled();
-      expect(handlers.authorize).not.toHaveBeenCalled();
       expect(handlers.perform).not.toHaveBeenCalled();
     },
   );

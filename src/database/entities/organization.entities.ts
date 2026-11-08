@@ -20,7 +20,7 @@ export class DivisionEntity {
   })
   createdAt: Date;
 
-  @Column({ name: 'code', type: 'varchar', length: 32 })
+  @Column({ name: 'code', type: 'varchar', length: 40 })
   code: string;
 
   @Column({ name: 'name', type: 'varchar', length: 160 })
@@ -90,7 +90,7 @@ export class PositionEntity {
   })
   divisionId: string;
 
-  @Column({ name: 'code', type: 'varchar', length: 32 })
+  @Column({ name: 'code', type: 'varchar', length: 40 })
   code: string;
 
   @Column({ name: 'name', type: 'varchar', length: 160 })

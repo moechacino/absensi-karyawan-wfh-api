@@ -4,6 +4,7 @@ import type { DataSourceOptions } from 'typeorm';
 import type { RuntimeConfig } from '../runtime/runtime.config';
 import { RuntimeDependencyError } from '../runtime/runtime.errors';
 import { DATABASE_ENTITIES } from './entities';
+import { OrganizationCodeLength1794127860128 } from './migrations/1794127860128-organization-code-length';
 import { InitialSchema1794096000001 } from './migrations/1794096000001-initial-schema';
 
 export function dataSourceOptions(config: RuntimeConfig): DataSourceOptions {
@@ -23,7 +24,10 @@ export function dataSourceOptions(config: RuntimeConfig): DataSourceOptions {
     connectTimeout: config.database.connectTimeoutMs,
     multipleStatements: false,
     entities: DATABASE_ENTITIES,
-    migrations: [InitialSchema1794096000001],
+    migrations: [
+      InitialSchema1794096000001,
+      OrganizationCodeLength1794127860128,
+    ],
     migrationsTableName: 'schema_migrations',
     migrationsTransactionMode: 'none',
     synchronize: false,

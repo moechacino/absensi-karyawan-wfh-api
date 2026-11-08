@@ -39,7 +39,6 @@ export class IdempotencyService {
     const request = prepareRequest(command, handlers, this.clock);
 
     return this.repository.runExclusive(request, async (manager) => {
-      await handlers.authorize(manager);
       const previous = await this.repository.findForUpdate(manager, request);
       const cached = await this.findReplay(manager, request, previous);
       const replayed = cached !== null;
@@ -61,11 +60,15 @@ export class IdempotencyService {
       return null;
     }
 
+    if (previous.state === 'IN_PROGRESS') {
+      throw inProgress();
+    }
+
     const now = this.clock.now();
 
     if (previous.expiresAt > now && previous.fingerprint !== request.hash) {
       throw new ProblemException(
-        409,
+        422,
         'IDEMPOTENCY_KEY_REUSED',
         'Idempotency key reused',
         {
@@ -74,14 +77,7 @@ export class IdempotencyService {
       );
     }
 
-    if (
-      previous.state === 'IN_PROGRESS' &&
-      (!previous.leaseExpiresAt || previous.leaseExpiresAt > now)
-    ) {
-      throw inProgress();
-    }
-
-    if (previous.expiresAt <= now || previous.state === 'IN_PROGRESS') {
+    if (previous.expiresAt <= now) {
       await this.repository.remove(manager, previous.id);
 
       return null;
