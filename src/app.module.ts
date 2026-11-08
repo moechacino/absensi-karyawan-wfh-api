@@ -1,3 +1,4 @@
+import { FileModule } from './files/file.module';
 import { AuthModule } from './auth/auth.module';
 import { IdempotencyModule } from './idempotency/idempotency.module';
 import { HttpModule } from './http/http.module';
@@ -12,6 +13,7 @@ import { RuntimeModule } from './runtime/runtime.module';
     HttpModule,
     IdempotencyModule,
     AuthModule,
+    FileModule,
   ],
 })
 export class AppModule {}

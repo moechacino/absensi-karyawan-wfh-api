@@ -27,13 +27,26 @@ export class AuthRepository {
     manager: EntityManager,
     where: { id: string } | { email: string },
   ): Promise<EmployeeEntity | null> {
-    return manager
-      .getRepository(EmployeeEntity)
-      .createQueryBuilder('employee')
-      .addSelect(['employee.initialPassword', 'employee.passwordHash'])
-      .where(where)
-      .setLock('pessimistic_write')
-      .getOne();
+    return manager.findOne(EmployeeEntity, {
+      where,
+      select: {
+        id: true,
+        createdAt: true,
+        fullName: true,
+        email: true,
+        divisionId: true,
+        positionId: true,
+        role: true,
+        status: true,
+        photoFileId: true,
+        version: true,
+        updatedAt: true,
+        hasPasswordChanged: true,
+        initialPassword: true,
+        passwordHash: true,
+      },
+      lock: { mode: 'pessimistic_write' },
+    });
   }
 
   async changePassword(

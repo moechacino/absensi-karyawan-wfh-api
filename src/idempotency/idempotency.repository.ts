@@ -121,21 +121,24 @@ export class IdempotencyRepository {
   }
 
   findForUpdate(manager: EntityManager, request: PreparedRequest) {
-    return manager
-      .getRepository(IdempotencyOperationEntity)
-      .createQueryBuilder('operation')
-      .addSelect('operation.result')
-      .where(
-        'operation.actorId = :actorId AND operation.routeScope = :route AND operation.idempotencyKey = :key',
-        {
-          actorId: request.actorId,
-          route: request.operation,
-          key: request.key,
-        },
-      )
-      .setLock('pessimistic_write')
-      .setOnLocked('nowait')
-      .getOne();
+    return manager.findOne(IdempotencyOperationEntity, {
+      where: {
+        actorId: request.actorId,
+        routeScope: request.operation,
+        idempotencyKey: request.key,
+      },
+      select: {
+        id: true,
+        fingerprint: true,
+        state: true,
+        leaseExpiresAt: true,
+        expiresAt: true,
+        httpStatus: true,
+        resourceId: true,
+        result: true,
+      },
+      lock: { mode: 'pessimistic_write', onLocked: 'nowait' },
+    });
   }
 
   async remove(manager: EntityManager, id: string): Promise<void> {
