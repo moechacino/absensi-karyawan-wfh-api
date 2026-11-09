@@ -4,6 +4,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import type { CanActivate, ExecutionContext } from '@nestjs/common';
 import type { TcpContext } from '@nestjs/microservices';
 
+import { ProblemException } from '../http/problem';
 import { AccessTokenService } from '../auth/access-token.service';
 import type { Actor } from '../auth/access-token.service';
 
@@ -11,27 +12,12 @@ import { RPC_CONFIG, RPC_REQUEST_BYTES } from './rpc.config';
 import type { RpcConfig } from './rpc.config';
 import { rpcFault } from './rpc.fault';
 import { ATTENDANCE_PATTERNS as patterns } from './rpc.contract';
+import { isAttendanceWrite, requiresAttendanceHr } from './rpc.pattern-policy';
 
 const uuid =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const actors = new WeakMap<TcpContext, Actor>();
-
-const writes = new Set<string>([
-  patterns.scheduleChange,
-  patterns.holidaysChange,
-  patterns.checkIn,
-  patterns.checkOut,
-]);
-const hrPatterns = new Set<string>([
-  patterns.schedulePreview,
-  patterns.scheduleChange,
-  patterns.scheduleVersions,
-  patterns.holidaysPreview,
-  patterns.holidaysChange,
-  patterns.monitoringList,
-  patterns.hrRecordGet,
-]);
 
 export function rpcActor(context: TcpContext): Actor {
   const actor = actors.get(context);
@@ -65,7 +51,7 @@ export function validateEnvelope(
     'input',
   ];
 
-  if (writes.has(pattern)) {
+  if (isAttendanceWrite(pattern)) {
     allowed.push('idempotencyKey');
   }
 
@@ -86,7 +72,7 @@ export function validateEnvelope(
     !data.input ||
     typeof data.input !== 'object' ||
     Array.isArray(data.input) ||
-    (writes.has(pattern) &&
+    (isAttendanceWrite(pattern) &&
       (typeof data.idempotencyKey !== 'string' ||
         !uuid.test(data.idempotencyKey)))
   ) {
@@ -122,11 +108,18 @@ export class RpcGuard implements CanActivate {
 
     const actor = await this.tokens
       .verify(data.accessToken as string)
-      .catch(() => {
-        throw rpcFault('RPC_UNAUTHORIZED');
+      .catch((error: unknown) => {
+        if (
+          error instanceof ProblemException &&
+          (error.code === 'TOKEN_INVALID' || error.code === 'TOKEN_EXPIRED')
+        ) {
+          throw rpcFault(error.code);
+        }
+
+        throw rpcFault('RPC_INTERNAL_ERROR');
       });
 
-    if (hrPatterns.has(pattern) && actor.role !== 'HRD') {
+    if (requiresAttendanceHr(pattern) && actor.role !== 'HRD') {
       throw rpcFault('RPC_FORBIDDEN');
     }
 

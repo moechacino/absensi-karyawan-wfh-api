@@ -33,6 +33,12 @@ export interface RpcWriteEnvelope<TInput> extends RpcEnvelope<TInput> {
   idempotencyKey: string;
 }
 
+export interface RpcCommandReply<TBody> {
+  status: 200 | 201;
+  body: TBody;
+  replayed: boolean;
+}
+
 // Task 024 supplies the staged descriptor, authorization and outcome DTOs.
 // No transport-generated fields belong in the logical command fingerprint.
 export interface CheckInEnvelope<
@@ -44,7 +50,7 @@ export interface CheckInEnvelope<
 
 export interface CheckInRpcOperation<TStagedImage> {
   request: CheckInEnvelope<TStagedImage>;
-  response: Response.Attendance;
+  response: RpcCommandReply<Response.Attendance>;
 }
 
 export interface AttendanceRpcOperations {
@@ -62,7 +68,7 @@ export interface AttendanceRpcOperations {
   };
   'attendance.v1.schedule.change': {
     request: RpcWriteEnvelope<Input.ScheduleInput>;
-    response: Response.ScheduleChanged;
+    response: RpcCommandReply<Response.ScheduleChanged>;
   };
   'attendance.v1.schedule.versions': {
     request: RpcEnvelope<Input.PageInput>;
@@ -78,7 +84,7 @@ export interface AttendanceRpcOperations {
   };
   'attendance.v1.holidays.change': {
     request: RpcWriteEnvelope<Input.HolidayChangeInput>;
-    response: Response.HolidayChanged;
+    response: RpcCommandReply<Response.HolidayChanged>;
   };
   'attendance.v1.home.get': {
     request: RpcEnvelope<Input.EmptyInput>;
@@ -86,7 +92,7 @@ export interface AttendanceRpcOperations {
   };
   'attendance.v1.check-out': {
     request: RpcWriteEnvelope<Input.CheckOutInput>;
-    response: Response.Attendance;
+    response: RpcCommandReply<Response.Attendance>;
   };
   'attendance.v1.days.list': {
     request: RpcEnvelope<Input.AttendanceDaysInput>;

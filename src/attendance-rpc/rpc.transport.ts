@@ -1,45 +1,18 @@
 import { Catch } from '@nestjs/common';
 import type { RpcExceptionFilter } from '@nestjs/common';
-import { RpcException, Transport } from '@nestjs/microservices';
+import { Transport } from '@nestjs/microservices';
 import type { TcpOptions } from '@nestjs/microservices';
 import { throwError } from 'rxjs';
 
 import { RPC_REQUEST_BYTES, RPC_RESPONSE_BYTES } from './rpc.config';
 import type { RpcConfig } from './rpc.config';
 import { rpcFault } from './rpc.fault';
-import type { RpcFault } from './rpc.fault';
-
-// Only faults created by this module are safe to send. Unknown errors are discarded.
-function safeFault(error: unknown): RpcFault {
-  const value = error instanceof RpcException ? error.getError() : undefined;
-
-  if (
-    value &&
-    typeof value === 'object' &&
-    'code' in value &&
-    'version' in value &&
-    value.version === 1 &&
-    typeof value.code === 'string' &&
-    [
-      'RPC_INVALID_ENVELOPE',
-      'RPC_UNSUPPORTED_VERSION',
-      'RPC_UNAUTHORIZED',
-      'RPC_FORBIDDEN',
-      'RPC_VALIDATION_FAILED',
-      'RPC_RESPONSE_TOO_LARGE',
-      'RPC_INTERNAL_ERROR',
-    ].includes(value.code)
-  ) {
-    return rpcFault(value.code as RpcFault['code']).getError() as RpcFault;
-  }
-
-  return rpcFault('RPC_INTERNAL_ERROR').getError() as RpcFault;
-}
+import { toRpcFault } from './rpc.fault-mapper';
 
 @Catch()
 export class RpcFaultFilter implements RpcExceptionFilter {
   catch(error: unknown) {
-    return throwError(() => safeFault(error));
+    return throwError(() => toRpcFault(error));
   }
 }
 
@@ -54,7 +27,7 @@ export function boundedResponse(packet: {
       return packet;
     }
   } catch {
-    return { id: packet.id, err: safeFault(undefined), isDisposed: true };
+    return { id: packet.id, err: toRpcFault(undefined), isDisposed: true };
   }
 
   return {

@@ -24,6 +24,7 @@ import request from 'supertest';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { RPC_CONFIG, parseRpcConfig } from '../src/attendance-rpc/rpc.config';
 import { AppModule } from '../src/app.module';
 import { configureHttp } from '../src/http/configure-http';
 import { ProblemException } from '../src/http/problem';
@@ -149,6 +150,13 @@ describe('shared production HTTP setup', () => {
       imports: [AppModule],
       controllers: [BoundaryController],
     })
+      .overrideProvider(RPC_CONFIG)
+      .useValue(
+        parseRpcConfig({
+          ATTENDANCE_RPC_CREDENTIAL:
+            'e2e-only-attendance-credential-at-least-32-bytes',
+        }),
+      )
       .overrideProvider(getDataSourceToken())
       .useValue({ isInitialized: false })
       .overrideProvider(RUNTIME_CONFIG)

@@ -206,7 +206,7 @@ describe('standalone attendance TCP foundation with MySQL', () => {
 
     for (const [data, code] of [
       [{ ...envelope(), serviceCredential: 'wrong' }, 'RPC_UNAUTHORIZED'],
-      [{ ...envelope(), accessToken: 'invalid' }, 'RPC_UNAUTHORIZED'],
+      [{ ...envelope(), accessToken: 'invalid' }, 'TOKEN_INVALID'],
       [{ ...envelope(), version: 2 }, 'RPC_UNSUPPORTED_VERSION'],
       [{ ...envelope(), actor: { role: 'HRD' } }, 'RPC_INVALID_ENVELOPE'],
       [envelope({ q: 'a'.repeat(161) }), 'RPC_VALIDATION_FAILED'],
@@ -250,6 +250,8 @@ describe('standalone attendance TCP foundation with MySQL', () => {
   it('sanitizes unexpected failures and bounds response size', async () => {
     await expect(send(envelope({ q: 'explode' }))).rejects.toEqual({
       version: 1,
+      kind: 'internal',
+      status: 500,
       code: 'RPC_INTERNAL_ERROR',
       message: 'Attendance RPC request failed.',
     });

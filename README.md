@@ -1,6 +1,6 @@
 # Absensi Karyawan WFH API
 
-NestJS HTTP gateway and separate TCP attendance application, using shared MySQL and private same-host disk. The active public contract is draft 0.8.0. Authentication, employee/organization management and private file delivery run in the gateway. Task 022 adds the attendance runtime/protocol foundation; calendar and attendance business handlers remain future tasks. Startup never creates accounts or runs migrations.
+NestJS HTTP gateway and separate TCP attendance application, using shared MySQL and private same-host disk. The active public contract is draft 0.8.1. Authentication, employee/organization management and private file delivery run in the gateway. Tasks 022/023 add the attendance runtime, typed gateway client and RPC error boundary; calendar and attendance business handlers remain future tasks. Startup never creates accounts or runs migrations.
 
 The shared API source is [contracts](../contracts/README.md). Work and review status live in [the task index](../api-server-tasks/index.md); the selected architecture is in [the technical design](../api-server-tasks/api-server.technical.md).
 
@@ -170,14 +170,14 @@ npm run start:gateway:dev
 npm run start:attendance:dev
 ```
 
-`start:dev` remains the gateway-only Nest watcher. Do not run it alongside `build:watch`; both write `dist/`. Use Ctrl-C or SIGTERM for each process to release listeners and pools. Migrations remain one explicit operator-controlled CLI, run before either app; neither startup applies migrations. Auth, employee/organization and profile-file HTTP operations do not connect to attendance or wait for it at startup. Task 023 adds the gateway client and public failure mapping.
+`start:dev` remains the gateway-only Nest watcher. Do not run it alongside `build:watch`; both write `dist/`. Use Ctrl-C or SIGTERM for each process to release listeners and pools. Migrations remain one explicit operator-controlled CLI, run before either app; neither startup applies migrations. Both applications validate RPC configuration. The gateway creates TCP connections only when a service-backed operation calls its client; startup and gateway-owned HTTP operations do not wait for attendance availability.
 
 | Setting | Constraint/default |
 | --- | --- |
 | `ATTENDANCE_RPC_HOST` | `127.0.0.1` (default) or `::1` only; no wildcard, hostname or remote IP |
 | `ATTENDANCE_RPC_PORT` | Independent port, default 4001, range 1–65535 |
-| `ATTENDANCE_RPC_CREDENTIAL` | Required for attendance; separate non-placeholder server secret of 32–256 UTF-8 bytes; must differ from JWT secret |
-| `ATTENDANCE_RPC_DEADLINE_MS` | Finite gateway wait budget, default 5000, range 100–60000 ms; consumed by the client in task 023 |
+| `ATTENDANCE_RPC_CREDENTIAL` | Required for both processes; separate non-placeholder server secret of 32–256 UTF-8 bytes; must differ from JWT secret |
+| `ATTENDANCE_RPC_DEADLINE_MS` | Finite gateway wait budget, default 5000, range 100–60000 ms; enforced by the gateway client, including connection time |
 
 Generate a separate random credential using the command above. Never expose it, the JWT secret, or private paths to the web client. Loopback is the accepted same-host trust boundary; remote deployment requires a new TLS/network/storage decision.
 
@@ -205,8 +205,34 @@ A request is `{version: 1, requestId, serviceCredential, accessToken, input}`. `
 
 No production business handler or probe endpoint is registered by task 022. Owning feature tasks register `@MessagePattern(ATTENDANCE_PATTERNS...)` handlers, use concrete class DTOs with `@Payload('input')`, and obtain verified actor claims through `rpcActor(@Ctx() context)`. The standalone global pipeline validates envelope/version/key, authenticates the gateway credential and JWT, checks HRD claims for HR patterns, then validates the input DTO **once** before handler/runner execution. DTOs reject unknown fields, null optional values, implicit scalar coercion, malformed UUID/date/time strings and out-of-bound arrays/pages/queries. Domain decisions (supported IANA zones, date ranges, holiday consistency, scheduling rules) remain owning service work. No role/status DB lookup or revocation is introduced.
 
-RPC faults are `{version: 1, code, message}`. Foundation codes are `RPC_INVALID_ENVELOPE`, `RPC_UNSUPPORTED_VERSION`, `RPC_UNAUTHORIZED`, `RPC_FORBIDDEN`, `RPC_VALIDATION_FAILED`, `RPC_RESPONSE_TOO_LARGE`, `RPC_INTERNAL_ERROR`; unexpected errors and arbitrary exception text are sanitized. Public HTTP Problems, token challenges and domain-fault mapping are task 023 work. Attendance startup diagnostics exclude settings' values and driver errors.
+RPC faults are `{version: 1, code, kind, status, message}` with code/kind/status combinations defined in `rpc.fault.ts`. Foundation codes are `RPC_INVALID_ENVELOPE`, `RPC_UNSUPPORTED_VERSION`, `RPC_UNAUTHORIZED`, `RPC_FORBIDDEN`, `RPC_VALIDATION_FAILED`, `RPC_RESPONSE_TOO_LARGE`, `RPC_INTERNAL_ERROR`; unexpected errors and arbitrary exception text are sanitized. The task 023 adapter maps known faults to HTTP Problems and preserves token challenges; see below. Attendance startup diagnostics exclude settings' values and driver errors.
 
 The Nest TCP frame buffer is capped at 256 Ki characters; envelope validation also caps JSON at 256 KiB UTF-8. The response serializer caps the entire response packet at 2 MiB UTF-8, returning a bounded fault on overflow. Partial frames have a 5-second idle / 10-second total receive limit; non-reading peers have a 2 MiB send-buffer cap and 5-second drain limit. Clients must use `send()` request-response and the configured finite deadline. A timeout does not cancel a write or prove rollback; attendance mutations/receipts stay process-local and uncertain image/outcome recovery belongs to task 024. There is no gateway SQL transaction around TCP.
 
 The integration suite uses test-only handlers over real TCP/MySQL and starts both production entry points as separate processes. It checks credential/JWT/version/DTO rejection before handler work, response redaction and bounds, oversized frame rejection, occupied-port failure, SQL/socket shutdown, reconnect, and gateway HTTP availability with attendance absent. These are foundation checks; real business concurrency and cross-process evidence remain tasks 020/021.
+
+## Gateway attendance client and failure mapping (task 023)
+
+`GatewayAttendanceModule` is imported by the HTTP application and exports `AttendanceClient`. Feature modules import it and call `client.call(ATTENDANCE_PATTERNS..., request)` after HTTP guards and their normal DTO pipe. `gatewayRpcContext(request, response)` extracts the original JWT and current UUID request ID. Requests supply their validated `input` and, for writes, the original UUID `idempotencyKey`; the client supplies the pinned version and server-only credential, ignoring any caller overrides of transport/actor fields. No HTTP controller for a future feature is registered by this task.
+
+Each attempt creates one bounded TCP client, subscribes to `send()` once, and closes/destroys that attempt's socket in `finally`. The finite deadline includes connecting. Connections are not pooled or automatically retried; independent attempts do not cancel each other's sockets. Module shutdown closes outstanding sockets and rejects new attempts. The client receives no DataSource/manager/runner and opens no SQL transaction or receipt around RPC. A new attempt after a service restart creates a fresh connection.
+
+Reads return the declared DTO. Mutation replies use internal `RpcCommandReply<T> = {status, body, replayed}`; the handler returns its attendance-local runner result **after commit**. The owning HTTP controller applies status/replay headers and returns `body`, preserving the existing public success shape. Staged check-in descriptors and file-access/outcome DTOs remain task 024 work; those reserved operations are not callable through the typed facade yet.
+
+| Failure | HTTP behavior |
+| --- | --- |
+| Read connection loss/unavailable/unknown remote response | 503 `ATTENDANCE_SERVICE_UNAVAILABLE` |
+| Read deadline | 503 `ATTENDANCE_SERVICE_TIMEOUT` |
+| Lost/late write reply or unclassified internal write failure | 503 `ATTENDANCE_OUTCOME_UNKNOWN`; retain original key/input and potentially in-use staged bytes |
+| Explicit service-credential denial or a locally closed client before dispatch | 503 `ATTENDANCE_SERVICE_UNAVAILABLE` |
+| Service JWT invalid/expired | 401 `TOKEN_INVALID` / `TOKEN_EXPIRED`, with gateway Bearer challenge |
+| Known role/DTO/business/helper fault | Declared status/code; 409/422 idempotency outcomes and bounded Retry-After preserved |
+| Internal protocol mismatch or unexpected read failure | Sanitized 500 `INTERNAL_ERROR` |
+
+`RpcFaultFilter` converts declared `ProblemException` failures from existing local helpers and explicit RPC exceptions into a serializable discriminated fault union. Code, kind and status must match a fixed definition; messages come from the code registry. Optional field errors accept only bounded known DTO paths and canonical messages (at most 32); details accept nonnegative safe `expectedVersion`/`actualVersion` numbers; Retry-After is bounded to 1–60 seconds. Unknown exception text/details, SQL, stacks, disk paths and tokens are discarded. The gateway validates the same fault mapping and never infers codes from arbitrary Nest/driver message strings. The receiver rejects malformed correlation packets and byte-oversized responses without logging their payloads.
+
+The service still validates credentials/JWT/HR claims before the handler and validates the concrete operation DTO once through its normal RPC pipe. Owning features add resource-access guards before receipt disclosure; no authorize callback, repeated role check in a business service, revocation/status lookup, or transaction crossing TCP is introduced. A client deadline stops waiting and closes its socket; Promise-based remote work can still commit. Recover/replay the same command with its original key; do not create a replacement key to escape uncertainty. Check-in byte retention and committed-result lookup remain task 024 responsibilities.
+
+Shared contract draft **0.8.1** adds 503 declarations and Problem examples for service-backed operations, including future attendance-evidence authorization on file GET. It changes no public success schema/path. The Postman collection retains static success examples. The full checks pass: **262 unit**, **12 HTTP e2e**, **81 real MySQL integration** tests, build, lint, and `npm run typecheck` including all test files. The new integration probes exercise HTTP → real TCP → attendance-local MySQL receipts, commit/lost-reply/same-key replay with exactly one effect, changed-input 422, ownership/HR/JWT-expiry and DTO guard ordering, deadlines, unknown patterns, service absence/restart, and gateway-owned route independence. Probes are test-only and implement no production attendance business behavior.
+
+The explicit integration environment now also requires a test-only `ATTENDANCE_RPC_CREDENTIAL` (32–256 bytes, different from the JWT secret). Normal HTTP e2e fixtures override only their test configuration; production never uses a test fallback credential.

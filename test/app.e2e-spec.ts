@@ -22,6 +22,8 @@ describe('runtime foundation (e2e)', () => {
     originalEnvironment = { ...process.env };
     Object.assign(process.env, {
       NODE_ENV: 'test',
+      ATTENDANCE_RPC_CREDENTIAL:
+        'e2e-only-attendance-credential-at-least-32-bytes',
       DB_HOST: '127.0.0.1',
       DB_NAME: 'absensi_test',
       DB_USERNAME: 'absensi_test',
