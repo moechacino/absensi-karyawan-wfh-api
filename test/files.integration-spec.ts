@@ -1,3 +1,11 @@
+import { NestFactory } from '@nestjs/core';
+import type { INestMicroservice } from '@nestjs/common';
+import { AttendanceAppModule } from '../src/attendance-app.module';
+import { AttendanceFileService } from '../src/attendance-files/attendance-file.service';
+import { attendanceTcpOptions } from '../src/attendance-rpc/rpc.transport';
+import { loadRpcConfig } from '../src/attendance-rpc/rpc.config';
+import { ImageService } from '../src/files/image.service';
+import { stageImage } from '../src/files/stage-image';
 import {
   Controller,
   Post,
@@ -76,6 +84,7 @@ class ParentFixtureController {
 
 describe('private files HTTP and parent transactions with native MySQL', () => {
   let app: NestExpressApplication;
+  let attendance: INestMicroservice;
   let source: DataSource;
   let files: FileService;
   let storage: StorageService;
@@ -89,6 +98,11 @@ describe('private files HTTP and parent transactions with native MySQL', () => {
   beforeAll(async () => {
     const prepared = await prepareTestDatabase();
     await prepared.destroy();
+    attendance = await NestFactory.createMicroservice(AttendanceAppModule, {
+      ...attendanceTcpOptions(loadRpcConfig()),
+      logger: false,
+    });
+    await attendance.listen();
     const module = await Test.createTestingModule({
       imports: [AppModule, FileModule, AuthModule],
       controllers: [ParentFixtureController],
@@ -108,6 +122,7 @@ describe('private files HTTP and parent transactions with native MySQL', () => {
 
   afterAll(async () => {
     await app?.close();
+    await attendance?.close();
   });
 
   beforeEach(async () => {
@@ -306,29 +321,36 @@ describe('private files HTTP and parent transactions with native MySQL', () => {
   });
 
   it('keeps historical attendance evidence and allows its owner/HR to read it', async () => {
-    const id = await files.withStagedImage(
-      { bytes: png, mimeType: 'image/png', fileName: 'checkin.png' },
-      ids.employee,
-      'CHECK_IN_PHOTO',
-      (file) =>
-        source.transaction(async (manager) => {
-          await files.attach(manager, file);
-          await manager.insert(AttendanceEntity, {
-            id: randomUUID(),
-            employeeId: ids.employee,
-            workDate: '2026-11-08',
-            scheduleVersionId: ids.schedule,
-            timeZone: 'Asia/Jakarta',
-            plannedStartAt: new Date('2026-11-08T01:00Z'),
-            plannedEndAt: new Date('2026-11-08T09:00Z'),
-            checkInAt: new Date('2026-11-08T01:00Z'),
-            punctuality: 'ON_TIME',
-            photoFileId: file.id,
-          });
+    const file = {
+      ...(await stageImage(
+        {
+          input: { bytes: png, mimeType: 'image/png', fileName: 'checkin.png' },
+          ownerEmployeeId: ids.employee,
+          purpose: 'CHECK_IN_PHOTO',
+        },
+        app.get(ImageService),
+        storage,
+      )),
+      purpose: 'CHECK_IN_PHOTO' as const,
+      stagedAt: new Date().toISOString(),
+    };
+    const id = await source.transaction(async (manager) => {
+      await attendance.get(AttendanceFileService).attach(manager, file);
+      await manager.insert(AttendanceEntity, {
+        id: randomUUID(),
+        employeeId: ids.employee,
+        workDate: '2026-11-08',
+        scheduleVersionId: ids.schedule,
+        timeZone: 'Asia/Jakarta',
+        plannedStartAt: new Date('2026-11-08T01:00Z'),
+        plannedEndAt: new Date('2026-11-08T09:00Z'),
+        checkInAt: new Date('2026-11-08T01:00Z'),
+        punctuality: 'ON_TIME',
+        photoFileId: file.id,
+      });
 
-          return file.id;
-        }),
-    );
+      return file.id;
+    });
     await files.deleteReplaced(id);
     await request(app.getHttpServer())
       .get('/api/v1/files/' + id)

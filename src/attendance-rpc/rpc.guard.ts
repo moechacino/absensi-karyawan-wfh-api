@@ -79,7 +79,16 @@ export function validateEnvelope(
     throw rpcFault('RPC_INVALID_ENVELOPE');
   }
 
-  // Task 024 extends validation before check-in/file/outcome handlers are registered.
+  if (
+    pattern === patterns.checkIn &&
+    (typeof data.fullUploadReceivedAt !== 'string' ||
+      !data.stagedImage ||
+      typeof data.stagedImage !== 'object' ||
+      Array.isArray(data.stagedImage))
+  ) {
+    throw rpcFault('RPC_INVALID_ENVELOPE');
+  }
+
   return data;
 }
 
@@ -119,7 +128,18 @@ export class RpcGuard implements CanActivate {
         throw rpcFault('RPC_INTERNAL_ERROR');
       });
 
-    if (requiresAttendanceHr(pattern) && actor.role !== 'HRD') {
+    const outcomeOperation =
+      pattern === patterns.commandOutcome
+        ? (data.input as Record<string, unknown>).operation
+        : undefined;
+
+    if (
+      (requiresAttendanceHr(pattern) ||
+        ['changeWorkSchedule', 'changeHolidayCalendar'].includes(
+          outcomeOperation as string,
+        )) &&
+      actor.role !== 'HRD'
+    ) {
       throw rpcFault('RPC_FORBIDDEN');
     }
 

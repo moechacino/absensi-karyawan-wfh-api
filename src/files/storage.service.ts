@@ -116,6 +116,54 @@ export class StorageService {
     }
   }
 
+  async read(key: string, size: number): Promise<Buffer> {
+    if (
+      !Number.isInteger(size) ||
+      size < 1 ||
+      size > this.config.storage.maxFileBytes
+    ) {
+      throw new ProblemException(422, 'INVALID_FILE', 'Invalid staged image');
+    }
+
+    const handle = await this.open(key, size);
+
+    try {
+      const bytes = Buffer.alloc(size);
+      let offset = 0;
+
+      while (offset < size) {
+        const { bytesRead } = await handle.read(
+          bytes,
+          offset,
+          size - offset,
+          offset,
+        );
+
+        if (!bytesRead) {
+          throw new ProblemException(
+            503,
+            'FILE_CONTENT_UNAVAILABLE',
+            'File content unavailable',
+          );
+        }
+
+        offset += bytesRead;
+      }
+
+      if ((await handle.stat()).size !== size) {
+        throw new ProblemException(
+          503,
+          'FILE_CONTENT_UNAVAILABLE',
+          'File content unavailable',
+        );
+      }
+
+      return bytes;
+    } finally {
+      await handle.close();
+    }
+  }
+
   async delete(key: string): Promise<void> {
     try {
       await unlink(await this.path(key));

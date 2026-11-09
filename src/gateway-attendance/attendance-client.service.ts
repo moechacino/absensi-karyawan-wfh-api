@@ -76,6 +76,12 @@ export class AttendanceClient implements OnModuleDestroy {
       serviceCredential: this.config.serviceCredential,
       accessToken: request.accessToken,
       input: request.input,
+      ...('stagedImage' in request && 'fullUploadReceivedAt' in request
+        ? {
+            stagedImage: request.stagedImage,
+            fullUploadReceivedAt: request.fullUploadReceivedAt,
+          }
+        : {}),
       ...(write && 'idempotencyKey' in request
         ? { idempotencyKey: request.idempotencyKey }
         : {}),

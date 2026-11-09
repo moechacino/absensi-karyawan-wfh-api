@@ -1,11 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import type { EntityManager } from 'typeorm';
-import {
-  EmployeeEntity,
-  AttendanceEntity,
-  FileObjectEntity,
-} from '../database/entities';
+import { EmployeeEntity, FileObjectEntity } from '../database/entities';
 import type { Actor } from '../auth/access-token.service';
 import type { StagedImage } from './file.types';
 
@@ -23,14 +19,20 @@ export class FileRepository {
       .addSelect('file.objectKey')
       .where('file.id = :id AND file.state = :state', { id, state: 'ATTACHED' })
       .andWhere(
-        `((file.purpose = 'EMPLOYEE_PROFILE_PHOTO' AND EXISTS (SELECT 1 FROM employees e WHERE e.photo_file_id = file.id AND e.id = file.owner_employee_id)) OR
-        (file.purpose = 'CHECK_IN_PHOTO' AND EXISTS (SELECT 1 FROM attendances a WHERE a.photo_file_id = file.id AND a.employee_id = file.owner_employee_id)))`,
+        "file.purpose = 'EMPLOYEE_PROFILE_PHOTO' AND EXISTS (SELECT 1 FROM employees e WHERE e.photo_file_id = file.id AND e.id = file.owner_employee_id)",
       )
       .andWhere(
         actor.role === 'HRD' ? '1 = 1' : 'file.owner_employee_id = :actor',
         { actor: actor.id },
       )
       .getOne();
+  }
+
+  findPurpose(id: string): Promise<FileObjectEntity | null> {
+    return this.source.getRepository(FileObjectEntity).findOne({
+      where: { id, state: 'ATTACHED' },
+      select: { id: true, purpose: true },
+    });
   }
 
   async attach(manager: EntityManager, staged: StagedImage): Promise<void> {
@@ -45,7 +47,7 @@ export class FileRepository {
     return this.source.transaction('READ COMMITTED', async (manager) => {
       const file = await manager.findOne(FileObjectEntity, {
         where: { id },
-        select: { id: true, objectKey: true },
+        select: { id: true, objectKey: true, purpose: true },
         lock: { mode: 'pessimistic_write' },
       });
 
@@ -53,12 +55,10 @@ export class FileRepository {
         return { referenced: false };
       }
 
-      const [employee, attendance] = await Promise.all([
-        manager.existsBy(EmployeeEntity, { photoFileId: id }),
-        manager.existsBy(AttendanceEntity, { photoFileId: id }),
-      ]);
-
-      if (employee || attendance) {
+      if (
+        file.purpose !== 'EMPLOYEE_PROFILE_PHOTO' ||
+        (await manager.existsBy(EmployeeEntity, { photoFileId: id }))
+      ) {
         return { referenced: true };
       }
 

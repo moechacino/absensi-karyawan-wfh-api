@@ -48,6 +48,16 @@ export const rpcFaultDefinitions = {
   },
   FORBIDDEN: { kind: 'authorization', status: 403, message: 'Access denied' },
   NOT_FOUND: { kind: 'business', status: 404, message: 'Resource not found' },
+  INVALID_FILE: {
+    kind: 'business',
+    status: 422,
+    message: 'Invalid staged image',
+  },
+  FILE_CONTENT_UNAVAILABLE: {
+    kind: 'business',
+    status: 503,
+    message: 'File content unavailable',
+  },
   FILE_NOT_FOUND: { kind: 'business', status: 404, message: 'File not found' },
   INVALID_REQUEST: {
     kind: 'validation',

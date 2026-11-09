@@ -1,3 +1,10 @@
+import type {
+  StagedCheckInImage,
+  FileAccessInput,
+  CommandOutcomeInput,
+  FileReadDescriptor,
+  CommandOutcome,
+} from './rpc.files';
 import type * as Input from './rpc.inputs';
 import type * as Response from './rpc.responses';
 
@@ -39,21 +46,27 @@ export interface RpcCommandReply<TBody> {
   replayed: boolean;
 }
 
-// Task 024 supplies the staged descriptor, authorization and outcome DTOs.
-// No transport-generated fields belong in the logical command fingerprint.
-export interface CheckInEnvelope<
-  TStagedImage,
-> extends RpcWriteEnvelope<Input.EmptyInput> {
+// Transport-generated fields never belong in the logical command fingerprint.
+export interface CheckInEnvelope extends RpcWriteEnvelope<Input.EmptyInput> {
   fullUploadReceivedAt: string;
-  stagedImage: TStagedImage;
+  stagedImage: StagedCheckInImage;
 }
 
-export interface CheckInRpcOperation<TStagedImage> {
-  request: CheckInEnvelope<TStagedImage>;
+export interface CheckInRpcOperation {
+  request: CheckInEnvelope;
   response: RpcCommandReply<Response.Attendance>;
 }
 
 export interface AttendanceRpcOperations {
+  'attendance.v1.check-in': CheckInRpcOperation;
+  'attendance.v1.file-access': {
+    request: RpcEnvelope<FileAccessInput>;
+    response: FileReadDescriptor;
+  };
+  'attendance.v1.command-outcome': {
+    request: RpcEnvelope<CommandOutcomeInput>;
+    response: CommandOutcome;
+  };
   'attendance.v1.schedule.get': {
     request: RpcEnvelope<Input.EmptyInput>;
     response: Response.WorkSchedule;

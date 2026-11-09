@@ -34,6 +34,25 @@ describe('StorageService', () => {
     await expect(storage.open(key, 5)).rejects.toThrow();
   });
 
+  it('reads bounded attested bytes and rejects oversized, missing or mismatched objects', async () => {
+    const key = randomUUID() + '.png';
+    await storage.put(key, Buffer.from('bytes'));
+    await expect(storage.read(key, 5)).resolves.toEqual(Buffer.from('bytes'));
+
+    for (const size of [0, -1, 1.5, 5242881]) {
+      await expect(storage.read(key, size)).rejects.toMatchObject({
+        code: 'INVALID_FILE',
+      });
+    }
+
+    await expect(storage.read(key, 4)).rejects.toMatchObject({
+      code: 'FILE_CONTENT_UNAVAILABLE',
+    });
+    await expect(storage.read(randomUUID() + '.png', 5)).rejects.toMatchObject({
+      code: 'FILE_CONTENT_UNAVAILABLE',
+    });
+  });
+
   it('blocks traversal, symlink reads, and symlink storage roots', async () => {
     const key = randomUUID() + '.png';
     await writeFile(join(root, 'private'), 'private');

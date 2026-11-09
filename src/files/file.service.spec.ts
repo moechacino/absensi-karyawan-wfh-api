@@ -33,10 +33,31 @@ describe('FileService', () => {
       repository as unknown as FileRepository,
       storage as unknown as StorageService,
       images as unknown as ImageService,
+      {} as import('../gateway-attendance/attendance-client.service').AttendanceClient,
     );
 
     return { service, repository, storage, images };
   }
+
+  it('requires the remote lifecycle for attendance uploads and metadata', async () => {
+    const { service, storage, repository } = setup();
+    await expect(
+      service.withStagedImage(
+        input,
+        owner,
+        'CHECK_IN_PHOTO',
+        async () => 'done',
+      ),
+    ).rejects.toThrow('remote image lifecycle');
+    expect(() =>
+      service.attach(
+        {} as EntityManager,
+        { purpose: 'CHECK_IN_PHOTO' } as import('./file.types').StagedImage,
+      ),
+    ).toThrow('Attendance owns');
+    expect(storage.put).not.toHaveBeenCalled();
+    expect(repository.attach).not.toHaveBeenCalled();
+  });
 
   it('stages bytes before the parent command and preserves committed referenced images', async () => {
     const { service, repository, storage } = setup(true);
@@ -69,7 +90,7 @@ describe('FileService', () => {
     await service.withStagedImage(
       input,
       owner,
-      'CHECK_IN_PHOTO',
+      'EMPLOYEE_PROFILE_PHOTO',
       async () => 'replayed',
     );
     expect(storage.delete).toHaveBeenCalledTimes(1);
@@ -79,9 +100,14 @@ describe('FileService', () => {
     const { service, storage } = setup();
     const error = new Error('SQL failure');
     await expect(
-      service.withStagedImage(input, owner, 'CHECK_IN_PHOTO', async () => {
-        throw error;
-      }),
+      service.withStagedImage(
+        input,
+        owner,
+        'EMPLOYEE_PROFILE_PHOTO',
+        async () => {
+          throw error;
+        },
+      ),
     ).rejects.toBe(error);
     expect(storage.delete).toHaveBeenCalledTimes(1);
   });
@@ -91,7 +117,7 @@ describe('FileService', () => {
     storage.put.mockRejectedValue(new Error('Disk failure'));
     const command = jest.fn();
     await expect(
-      service.withStagedImage(input, owner, 'CHECK_IN_PHOTO', command),
+      service.withStagedImage(input, owner, 'EMPLOYEE_PROFILE_PHOTO', command),
     ).rejects.toThrow('Disk failure');
     expect(command).not.toHaveBeenCalled();
     expect(repository.retireIfUnreferenced).not.toHaveBeenCalled();
@@ -112,7 +138,7 @@ describe('FileService', () => {
         service.withStagedImage(
           input,
           owner,
-          'CHECK_IN_PHOTO',
+          'EMPLOYEE_PROFILE_PHOTO',
           async () => 'committed',
         ),
       ).resolves.toBe('committed');

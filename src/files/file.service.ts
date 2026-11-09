@@ -1,4 +1,6 @@
-import { randomUUID } from 'node:crypto';
+import { AttendanceClient } from '../gateway-attendance/attendance-client.service';
+import type { GatewayRpcContext } from '../gateway-attendance/rpc.context';
+import { stageImage } from './stage-image';
 import { Injectable, Logger } from '@nestjs/common';
 import type { EntityManager } from 'typeorm';
 import type { ReadStream } from 'node:fs';
@@ -29,6 +31,7 @@ export class FileService {
     private readonly repository: FileRepository,
     private readonly storage: StorageService,
     private readonly images: ImageService,
+    private readonly attendance: AttendanceClient,
   ) {}
 
   // The callback must resolve only after its owning SQL/idempotency command commits or replays.
@@ -74,34 +77,18 @@ export class FileService {
   }
 
   private async stage(upload: FileUpload): Promise<StagedImage> {
-    if (
-      !['CHECK_IN_PHOTO', 'EMPLOYEE_PROFILE_PHOTO'].includes(upload.purpose)
-    ) {
-      throw new ProblemException(
-        422,
-        'INVALID_FILE_PURPOSE',
-        'Invalid image purpose',
-      );
+    if (upload.purpose !== 'EMPLOYEE_PROFILE_PHOTO') {
+      throw new Error('Use the remote image lifecycle for check-in photos.');
     }
 
-    const image = await this.images.validate(upload.input);
-    const id = randomUUID();
-    const staged: StagedImage = {
-      id,
-      objectKey: `${id}.${image.extension}`,
-      ownerEmployeeId: upload.ownerEmployeeId,
-      purpose: upload.purpose,
-      fileName: image.fileName,
-      mimeType: image.mimeType,
-      sizeBytes: image.bytes.length,
-      sha256: image.sha256,
-    };
-    await this.storage.put(staged.objectKey, image.bytes);
-
-    return staged;
+    return stageImage(upload, this.images, this.storage);
   }
 
   attach(manager: EntityManager, staged: StagedImage): Promise<void> {
+    if (staged.purpose !== 'EMPLOYEE_PROFILE_PHOTO') {
+      throw new Error('Attendance owns check-in image metadata.');
+    }
+
     return this.repository.attach(manager, staged);
   }
 
@@ -136,8 +123,24 @@ export class FileService {
     }
   }
 
-  async content(id: string, actor: Actor): Promise<FileContent> {
-    const file = await this.repository.findReadable(id, actor);
+  async content(
+    id: string,
+    actor: Actor,
+    context: GatewayRpcContext,
+  ): Promise<FileContent> {
+    const metadata = await this.repository.findPurpose(id);
+
+    if (!metadata) {
+      throw new ProblemException(404, 'FILE_NOT_FOUND', 'File not found');
+    }
+
+    const file =
+      metadata.purpose === 'CHECK_IN_PHOTO'
+        ? await this.attendance.call('attendance.v1.file-access', {
+            ...context,
+            input: { fileId: id },
+          })
+        : await this.repository.findReadable(id, actor);
 
     if (!file) {
       throw new ProblemException(404, 'FILE_NOT_FOUND', 'File not found');

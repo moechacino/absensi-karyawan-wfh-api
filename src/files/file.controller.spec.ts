@@ -6,7 +6,10 @@ import type { AuthenticatedRequest } from '../auth/auth.guard';
 
 describe('FileController streaming', () => {
   function setup(stream: Readable, method = 'GET') {
-    const response = Object.assign(new PassThrough(), { setHeader: jest.fn() });
+    const response = Object.assign(new PassThrough(), {
+      setHeader: jest.fn(),
+      getHeader: jest.fn(),
+    });
     const files = {
       content: jest.fn().mockResolvedValue({
         stream,
@@ -18,6 +21,7 @@ describe('FileController streaming', () => {
     const controller = new FileController(files as unknown as FileService);
     const request = {
       method,
+      headers: { authorization: 'Bearer test-token' },
       actor: { id: 'owner', role: 'EMPLOYEE' },
     } as AuthenticatedRequest;
 

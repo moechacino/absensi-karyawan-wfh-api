@@ -1,3 +1,4 @@
+import { gatewayRpcContext } from '../gateway-attendance/rpc.context';
 import { pipeline } from 'node:stream/promises';
 import {
   Controller,
@@ -32,7 +33,11 @@ export class FileController {
     @Req() request: AuthenticatedRequest,
     @Res() response: Response,
   ): Promise<void> {
-    const file = await this.service.content(id, request.actor);
+    const file = await this.service.content(
+      id,
+      request.actor,
+      gatewayRpcContext(request, response),
+    );
     const encodedName = encodeURIComponent(
       Buffer.from(file.fileName, 'utf8').toString('utf8'),
     ).replace(
