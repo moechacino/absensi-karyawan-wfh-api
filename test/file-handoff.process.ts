@@ -22,7 +22,8 @@ import type { Response } from 'express';
 import type { EntityManager } from 'typeorm';
 import { DataSource } from 'typeorm';
 import { AppModule } from '../src/app.module';
-import { AttendanceAppModule } from '../src/attendance-app.module';
+import { AttendanceRpcModule } from '../src/attendance-rpc/rpc.module';
+import { DatabaseModule } from '../src/database/database.module';
 import { AttendanceFileModule } from '../src/attendance-files/attendance-file.module';
 import { AttendanceFileService } from '../src/attendance-files/attendance-file.service';
 import { ATTENDANCE_PATTERNS as patterns } from '../src/attendance-rpc/rpc.contract';
@@ -138,7 +139,12 @@ class CommitProbeController {
 }
 
 @Module({
-  imports: [AttendanceAppModule, AttendanceFileModule, IdempotencyModule],
+  imports: [
+    AttendanceRpcModule,
+    DatabaseModule,
+    AttendanceFileModule,
+    IdempotencyModule,
+  ],
   controllers: [CommitProbeController],
   providers: [ProbeRepository],
 })

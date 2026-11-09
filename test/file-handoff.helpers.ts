@@ -6,12 +6,13 @@ import type { StagedCheckInImage } from '../src/attendance-rpc/rpc.files';
 
 const queries = new WeakMap<
   ChildProcess,
-  { attendanceReads: number; fileReads: number }
+  { attendanceReads: number; fileReads: number; reads: number }
 >();
 
 export function queryCounts(child: ChildProcess): {
   attendanceReads: number;
   fileReads: number;
+  reads: number;
 } {
   return { ...queries.get(child)! };
 }
@@ -76,16 +77,17 @@ export function processMessage<T>(
 export async function startProcess(
   mode: string,
   env: NodeJS.ProcessEnv,
+  script = 'test/file-handoff.process.ts',
 ): Promise<ChildProcess> {
   const child = spawn(
     process.execPath,
-    ['-r', 'ts-node/register/transpile-only', 'test/file-handoff.process.ts'],
+    ['-r', 'ts-node/register/transpile-only', script],
     {
       env: { ...process.env, ...env, HANDOFF_PROCESS: mode },
       stdio: ['ignore', 'ignore', 'pipe', 'ipc'],
     },
   );
-  const counts = { attendanceReads: 0, fileReads: 0 };
+  const counts = { attendanceReads: 0, fileReads: 0, reads: 0 };
   queries.set(child, counts);
   child.on('message', (value: unknown) => {
     if (
@@ -94,6 +96,7 @@ export async function startProcess(
       'event' in value &&
       value.event === 'query'
     ) {
+      counts.reads++;
       if ('attendanceRead' in value && value.attendanceRead) {
         counts.attendanceReads++;
       }

@@ -1,3 +1,4 @@
+import { AttendanceGatewayModule } from './attendance/attendance.gateway-module';
 import { Module } from '@nestjs/common';
 
 import { EmployeeModule } from './employees/employee.module';
@@ -14,6 +15,7 @@ import { HolidayGatewayModule } from './holidays/holiday.gateway-module';
 
 @Module({
   imports: [
+    AttendanceGatewayModule,
     HolidayGatewayModule,
     RuntimeModule,
     GatewayAttendanceModule,

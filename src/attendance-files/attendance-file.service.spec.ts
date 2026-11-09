@@ -1,3 +1,4 @@
+import { SystemClock } from '../runtime/clock';
 import { randomUUID } from 'node:crypto';
 import { AttendanceFileService } from './attendance-file.service';
 import type { AttendanceFileRepository } from './attendance-file.repository';
@@ -36,6 +37,7 @@ function setup() {
     repository as unknown as AttendanceFileRepository,
     storage as unknown as StorageService,
     images as unknown as ImageService,
+    new SystemClock(),
   );
 
   return { service, repository, storage, images };

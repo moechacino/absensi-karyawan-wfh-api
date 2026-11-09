@@ -11,6 +11,7 @@ import { ScheduleRpcController } from './schedule.rpc-controller';
 @Module({
   imports: [WorkCalendarModule, IdempotencyModule],
   controllers: [ScheduleRpcController],
+  exports: [ScheduleRepository],
   providers: [ScheduleRepository, ScheduleService, TimeZonesService],
 })
 export class ScheduleModule {}

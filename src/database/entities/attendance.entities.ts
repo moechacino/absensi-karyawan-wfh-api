@@ -1,4 +1,14 @@
-import { Column, Entity, ForeignKey, Index, PrimaryColumn } from 'typeorm';
+import type { Relation } from 'typeorm';
+import type { FileObjectEntity } from './files.entities';
+import {
+  Column,
+  Entity,
+  ForeignKey,
+  Index,
+  PrimaryColumn,
+  ManyToOne,
+  JoinColumn,
+} from 'typeorm';
 
 @Index('uq_attendance_day', ['employeeId', 'workDate'], { unique: true })
 @Index('uq_attendance_open', ['openEmployeeId'], { unique: true })
@@ -111,6 +121,14 @@ export class AttendanceEntity {
     select: false,
   })
   openEmployeeId: string | null;
+
+  @ManyToOne('FileObjectEntity', {
+    nullable: false,
+    createForeignKeyConstraints: false,
+    persistence: false,
+  })
+  @JoinColumn({ name: 'photo_file_id', referencedColumnName: 'id' })
+  photo: Relation<FileObjectEntity>;
 
   @Column({ name: 'version', type: 'int', unsigned: true, default: 1 })
   version: number;

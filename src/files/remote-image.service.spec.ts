@@ -1,3 +1,4 @@
+import { SystemClock } from '../runtime/clock';
 import { Logger } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { ProblemException } from '../http/problem';
@@ -36,6 +37,7 @@ function setup() {
     attendance as unknown as AttendanceClient,
     images as unknown as ImageService,
     storage as unknown as StorageService,
+    new SystemClock(),
   );
 
   return {
@@ -48,6 +50,18 @@ function setup() {
 }
 
 describe('RemoteImageService', () => {
+  it.each([undefined, 'not-a-uuid'])(
+    'rejects invalid key %s before decoding or staging bytes',
+    async (key) => {
+      const { service, storage, images } = setup();
+      await expect(
+        service.checkIn(input, owner, receivedAt, key as string, context),
+      ).rejects.toMatchObject({ code: 'INVALID_IDEMPOTENCY_KEY' });
+      expect(images.validate).not.toHaveBeenCalled();
+      expect(storage.put).not.toHaveBeenCalled();
+    },
+  );
+
   it('persists bytes before sending a descriptor, never a buffer, and preserves referenced success', async () => {
     const { run, attendance, storage } = setup();
     attendance.call.mockImplementation(

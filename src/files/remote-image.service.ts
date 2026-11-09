@@ -1,9 +1,11 @@
+import { Clock } from '../runtime/clock';
 import { Injectable, Logger } from '@nestjs/common';
 import { AttendanceClient } from '../gateway-attendance/attendance-client.service';
 import type { GatewayRpcContext } from '../gateway-attendance/rpc.context';
 import type { StagedCheckInImage } from '../attendance-rpc/rpc.files';
 import type { RpcCommandReply } from '../attendance-rpc/rpc.contract';
 import type { Attendance } from '../attendance-rpc/rpc.responses';
+import { uuid } from '../idempotency/idempotency.types';
 import { ProblemException } from '../http/problem';
 import { ImageService } from './image.service';
 import { StorageService } from './storage.service';
@@ -18,6 +20,7 @@ export class RemoteImageService {
     private readonly attendance: AttendanceClient,
     private readonly images: ImageService,
     private readonly storage: StorageService,
+    private readonly clock: Clock,
   ) {}
 
   async checkIn(
@@ -27,6 +30,14 @@ export class RemoteImageService {
     key: string,
     context: GatewayRpcContext,
   ): Promise<RpcCommandReply<Attendance>> {
+    if (typeof key !== 'string' || !uuid.test(key)) {
+      throw new ProblemException(
+        400,
+        'INVALID_IDEMPOTENCY_KEY',
+        'A UUID idempotency key is required',
+      );
+    }
+
     // The receipt must have been pinned immediately after multipart completion.
     if (!Number.isFinite(fullUploadReceivedAt.getTime())) {
       throw new ProblemException(
@@ -44,7 +55,7 @@ export class RemoteImageService {
     const stagedImage: StagedCheckInImage = {
       ...file,
       purpose: 'CHECK_IN_PHOTO',
-      stagedAt: new Date().toISOString(),
+      stagedAt: this.clock.now().toISOString(),
     };
     let reply: RpcCommandReply<Attendance>;
 

@@ -1,3 +1,4 @@
+import { Clock } from '../runtime/clock';
 import { Injectable } from '@nestjs/common';
 import type {
   CallHandler,
@@ -14,9 +15,11 @@ export type UploadRequest = AuthenticatedRequest & {
 // Register after Multer and before controller pipes on the check-in route.
 @Injectable()
 export class UploadReceiptInterceptor implements NestInterceptor {
+  constructor(private readonly clock: Clock) {}
+
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
     context.switchToHttp().getRequest<UploadRequest>().fullUploadReceivedAt =
-      new Date();
+      this.clock.now();
 
     return next.handle();
   }

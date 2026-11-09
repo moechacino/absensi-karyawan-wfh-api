@@ -1,4 +1,5 @@
 import type { CallHandler, ExecutionContext } from '@nestjs/common';
+import { SystemClock } from '../runtime/clock';
 import { of } from 'rxjs';
 import { UploadReceiptInterceptor } from './upload-receipt.interceptor';
 import type { UploadRequest } from './upload-receipt.interceptor';
@@ -22,7 +23,7 @@ describe('UploadReceiptInterceptor', () => {
     };
 
     try {
-      new UploadReceiptInterceptor().intercept(context, next);
+      new UploadReceiptInterceptor(new SystemClock()).intercept(context, next);
       expect(request.fullUploadReceivedAt).toEqual(now);
     } finally {
       jest.useRealTimers();

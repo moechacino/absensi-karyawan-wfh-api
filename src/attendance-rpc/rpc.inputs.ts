@@ -138,11 +138,16 @@ export class AttendanceRecordInput {
   attendanceId: string;
 }
 
-export class CheckOutInput extends AttendanceRecordInput {
+export class CheckoutVersionInput {
   @IsInt()
   @Min(0)
   @Max(Number.MAX_SAFE_INTEGER)
   expectedVersion: number;
+}
+
+export class CheckOutInput extends CheckoutVersionInput {
+  @IsUUID()
+  attendanceId: string;
 }
 
 export class MonitoringInput extends PageInput {

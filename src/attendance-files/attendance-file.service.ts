@@ -1,3 +1,4 @@
+import { Clock } from '../runtime/clock';
 import { Injectable } from '@nestjs/common';
 import type { EntityManager } from 'typeorm';
 import type { Actor } from '../auth/access-token.service';
@@ -19,6 +20,7 @@ export class AttendanceFileService {
     private readonly repository: AttendanceFileRepository,
     private readonly storage: StorageService,
     private readonly images: ImageService,
+    private readonly clock: Clock,
   ) {}
 
   // Called after RPC DTO validation, before opening the command's SQL transaction.
@@ -38,7 +40,7 @@ export class AttendanceFileService {
       !Number.isFinite(receipt.getTime()) ||
       receipt.toISOString() !== receivedAt ||
       receipt > stagedAt ||
-      stagedAt.getTime() > Date.now() + 5000
+      stagedAt.getTime() > this.clock.now().getTime() + 5000
     ) {
       throw new ProblemException(
         400,
