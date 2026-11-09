@@ -29,12 +29,18 @@
     "premigration:revert": "npm run build",
     "migration:revert": "npm run typeorm -- migration:revert -d dist/database/cli-data-source.js",
     "migration:create": "npm run typeorm -- migration:create",
-    "test:unit": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --config ./jest.config.ts --runInBand"
+    "test:unit": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --config ./jest.config.ts --runInBand",
+    "start:attendance": "node dist/attendance-main.js",
+    "start:attendance:dev": "node --watch dist/attendance-main.js",
+    "build:watch": "nest build --watch",
+    "start:gateway:dev": "node --watch dist/main.js",
+    "typecheck": "tsc --project tsconfig.json --noEmit --incremental false"
   },
   "dependencies": {
     "@nestjs/common": "12.3.3",
     "@nestjs/core": "12.3.3",
     "@nestjs/jwt": "12.0.4",
+    "@nestjs/microservices": "12.3.3",
     "@nestjs/platform-express": "12.3.3",
     "@nestjs/typeorm": "12.0.3",
     "argon2": "0.45.2",

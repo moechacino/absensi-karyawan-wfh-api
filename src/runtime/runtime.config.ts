@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { isIP } from 'node:net';
 import { isAbsolute, relative, resolve, sep } from 'node:path';
 import { parseEnv } from 'node:util';
+
 import { RuntimeConfigurationError } from './runtime.errors';
 
 export const RUNTIME_CONFIG = Symbol('RUNTIME_CONFIG');
@@ -51,11 +52,17 @@ export function parseRuntimeConfig(
   baseDirectory = applicationRoot,
 ): RuntimeConfig {
   const issues: string[] = [];
+
   const text = (key: string, fallback?: string): string => {
     const value = env[key]?.trim() || fallback;
-    if (!value) issues.push(`${key} is required`);
+
+    if (!value) {
+      issues.push(`${key} is required`);
+    }
+
     return value ?? '';
   };
+
   const integer = (
     key: string,
     fallback: number,
@@ -64,6 +71,7 @@ export function parseRuntimeConfig(
   ): number => {
     const value = env[key] ?? String(fallback);
     const parsed = Number(value);
+
     if (
       !/^(0|[1-9]\d*)$/.test(value) ||
       !Number.isSafeInteger(parsed) ||
@@ -74,10 +82,13 @@ export function parseRuntimeConfig(
         `${key} must be an integer between ${minimum} and ${maximum}`,
       );
     }
+
     return parsed;
   };
+
   const secret = (key: string, minimumBytes: number): string => {
     const value = env[key] ?? '';
+
     if (
       Buffer.byteLength(value) < minimumBytes ||
       /^(replace|change_me|<)/i.test(value)
@@ -86,15 +97,23 @@ export function parseRuntimeConfig(
         `${key} requires a non-placeholder secret of at least ${minimumBytes} bytes`,
       );
     }
+
     return value;
   };
+
   const origins = (key: string): readonly string[] => {
-    if (!env[key]) return Object.freeze([]);
+    if (!env[key]) {
+      return Object.freeze([]);
+    }
+
     const result: string[] = [];
+
     for (const value of env[key].split(',')) {
       const candidate = value.trim();
+
       try {
         const url = new URL(candidate);
+
         if (
           !/^https?:\/\/[^/?#]+$/.test(candidate) ||
           candidate.includes('@') ||
@@ -102,10 +121,14 @@ export function parseRuntimeConfig(
           url.pathname !== '/' ||
           url.username ||
           url.password
-        )
+        ) {
           throw new Error();
-        if (env.NODE_ENV === 'production' && url.protocol !== 'https:')
+        }
+
+        if (env.NODE_ENV === 'production' && url.protocol !== 'https:') {
           throw new Error();
+        }
+
         result.push(url.origin);
       } catch {
         issues.push(
@@ -113,24 +136,38 @@ export function parseRuntimeConfig(
         );
       }
     }
+
     return Object.freeze([...new Set(result)]);
   };
 
   const environment = text('NODE_ENV', 'development');
-  if (!['development', 'test', 'production'].includes(environment))
+
+  if (!['development', 'test', 'production'].includes(environment)) {
     issues.push('NODE_ENV must be development, test or production');
+  }
+
   const host = text('HOST', '127.0.0.1');
-  if (!isIP(host) && host !== 'localhost')
+
+  if (!isIP(host) && host !== 'localhost') {
     issues.push('HOST must be a bind IP or localhost');
+  }
+
   const databaseName = text('DB_NAME');
-  if (!/^[a-zA-Z0-9_]{1,64}$/.test(databaseName))
+
+  if (!/^[a-zA-Z0-9_]{1,64}$/.test(databaseName)) {
     issues.push('DB_NAME must contain 1–64 letters, digits or underscores');
+  }
+
   const algorithm = text('JWT_ALGORITHM', 'HS256');
-  if (algorithm !== 'HS256')
+
+  if (algorithm !== 'HS256') {
     issues.push('JWT_ALGORITHM must be HS256 for this runtime baseline');
+  }
+
   const storageValue = text('STORAGE_ROOT');
   const storageRoot = resolve(baseDirectory, storageValue);
   const storageRelative = relative(baseDirectory, storageRoot);
+
   if (
     !isAbsolute(storageRelative) &&
     storageRelative !== '..' &&
@@ -181,13 +218,18 @@ export function parseRuntimeConfig(
       ),
     }),
   };
-  if (issues.length) throw new RuntimeConfigurationError(issues);
+
+  if (issues.length) {
+    throw new RuntimeConfigurationError(issues);
+  }
+
   return Object.freeze(config);
 }
 
-export function loadRuntimeConfig(): RuntimeConfig {
+export function loadRuntimeEnvironment(): Environment {
   const filename = resolve(applicationRoot, '.env');
   let fileEnvironment: Environment = {};
+
   if (process.env.NODE_ENV !== 'test' && existsSync(filename)) {
     try {
       fileEnvironment = parseEnv(readFileSync(filename, 'utf8'));
@@ -195,6 +237,11 @@ export function loadRuntimeConfig(): RuntimeConfig {
       throw new RuntimeConfigurationError(['.env could not be read']);
     }
   }
+
   // Explicit process variables win. Tests never implicitly load developer secrets.
-  return parseRuntimeConfig({ ...fileEnvironment, ...process.env });
+  return { ...fileEnvironment, ...process.env };
+}
+
+export function loadRuntimeConfig(): RuntimeConfig {
+  return parseRuntimeConfig(loadRuntimeEnvironment());
 }

@@ -262,7 +262,7 @@ export class EmployeeService {
       !position ||
       position.divisionId !== divisionId ||
       position.status !== 'ACTIVE' ||
-      position.division.status !== 'ACTIVE'
+      position.division?.status !== 'ACTIVE'
     ) {
       throw new ProblemException(
         422,

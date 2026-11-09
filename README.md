@@ -1,6 +1,6 @@
 # Absensi Karyawan WFH API
 
-NestJS runtime foundation using Express, MySQL, TypeORM, and private local storage. Active draft 0.7.0 defers time off, balances/ledger, reconciliation, and PDF attachments. Explicit TypeORM-generated schema migrations are available; business routes, authentication flows, and file-content delivery remain later tasks. The foundation starts the application after reviewed migrations and checks its dependencies; `/` returns 404 and no account is created on startup.
+NestJS HTTP gateway and separate TCP attendance application, using shared MySQL and private same-host disk. The active public contract is draft 0.8.0. Authentication, employee/organization management and private file delivery run in the gateway. Task 022 adds the attendance runtime/protocol foundation; calendar and attendance business handlers remain future tasks. Startup never creates accounts or runs migrations.
 
 The shared API source is [contracts](../contracts/README.md). Work and review status live in [the task index](../api-server-tasks/index.md); the selected architecture is in [the technical design](../api-server-tasks/api-server.technical.md).
 
@@ -74,11 +74,10 @@ npm run start:dev
 | `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USERNAME`, `DB_PASSWORD` | Required connection identity/secret; port defaults to 3306; database name uses letters/digits/underscores |
 | `DB_POOL_SIZE`, `DB_CONNECT_TIMEOUT_MS` | Defaults to 10 connections and a 10-second connection timeout |
 | `JWT_ALGORITHM`, `JWT_SECRET`, `JWT_ISSUER`, `JWT_AUDIENCE` | HS256 only in this foundation; real non-placeholder secret required; issuer/audience required |
-| `JWT_ACCESS_TTL_SECONDS` | Default 28800 (8 hours), the accepted planning baseline |
+| `JWT_ACCESS_TTL_SECONDS` | Fixed 3600 seconds (one hour) |
 | `CORS_ORIGINS`, `CSRF_TRUSTED_ORIGINS` | Separate comma-delimited origin allowlists; no wildcard/path/credential/query; HTTPS only in production; empty means no cross-origin trust |
 | `STORAGE_ROOT` | Required private directory outside the application directory; relative paths resolve from `api-server/`; created with mode 0700 if absent and checked for read/write/traversal access |
 | `MAX_FILE_BYTES`, `MAX_CONCURRENT_UPLOADS` | Defaults to 5 MiB and four uploads; bytes cannot exceed the contract's 5 MiB ceiling; upload enforcement comes with the HTTP/storage tasks |
-| `DEFERRED_BUSINESS_TOKEN_TTL_SECONDS` | Default/max 600 seconds; token implementation comes in task 005 |
 | `IDEMPOTENCY_RETENTION_SECONDS` | Default/minimum 86400 seconds; operation retention implementation comes in task 005 |
 
 Password policy defaults are 15–128 characters. Environment policy changes must be reflected in the shared contract and published policy before release. Config validation reports setting names and constraints, never rejected values. Database/storage startup errors are sanitized; use a MySQL client and local operational logs to diagnose the actual service, rather than enabling SQL/credential logging.
@@ -99,12 +98,13 @@ Task 003 uses the official TypeORM CLI: `migration:generate`, `migration:create`
 ## Verification
 
 ```sh
+npm run typecheck
 npm run lint
 npm test -- --runInBand
 npm run test:e2e -- --runInBand
 ```
 
-Unit tests check runtime parsing/origin/secret/policy bounds. HTTP e2e fixtures use the production setup with the SQL provider replaced and temporary private storage; they verify validation/serialization, CORS/CSRF, request IDs/Problems, upload bounds, redaction and binary/204 behavior without publishing test routes in production. Real MySQL proof remains the integration suite. See the [HTTP task notes](../api-server-tasks/004-http-boundary.md) for DTO/guard usage, limits and error codes.
+`npm run typecheck` runs TypeScript against the root configuration, including application source, unit tests and `test/` fixtures/e2e/integration suites; `build` intentionally excludes test files. Unit tests check runtime parsing/origin/secret/policy bounds. HTTP e2e fixtures use the production setup with the SQL provider replaced and temporary private storage; they verify validation/serialization, CORS/CSRF, request IDs/Problems, upload bounds, redaction and binary/204 behavior without publishing test routes in production. Real MySQL proof remains the integration suite. See the [HTTP task notes](../api-server-tasks/004-http-boundary.md) for DTO/guard usage, limits and error codes.
 
 For the explicit integration suite, prepare a **dedicated empty MySQL 8.4 database with a name ending in `_test`** and put its `DB_*` settings, a test-only JWT secret/issuer/audience, and a private `STORAGE_ROOT` in ignored `.env.test.local`, with `NODE_ENV=test`. This suite never implicitly uses `.env`. It explicitly applies the test schema, verifies constraints and standard migration behavior, creates fictional rows inside rolled-back transactions, starts the actual Nest application, and verifies JWT plus native Argon2id imports. It does not create real accounts or change your existing service. The database guide describes migration privileges and test isolation.
 
@@ -149,3 +149,64 @@ Employee detail GET uses an unlocked committed read. Version-checked writes and 
 EmployeeRepository uses TypeORM find options with explicit division/position/photo relations and relationLoadStrategy=join, without QueryBuilder. EmployeeService maps the loaded relations directly. Normal detail/list reads open no transaction or row lock and perform no per-employee reference queries. Detail uses one SELECT; a nonempty paginated list uses three SELECTs (TypeORM's distinct-ID page query, its joined data query and the independent count query). List data/count run through Promise.all. Password/hash/storage-key columns are excluded; photo ownership/purpose/state are checked before projection. Relation mappings reuse the existing scalar columns and foreign keys without schema drift or a migration. Write-result reads reuse the owning command manager.
 
 Employee assignment validation reads the position and its division in one joined repository lookup. The save transaction locks both rows and checks the requested division ID plus both active statuses.
+
+## Separate attendance runtime (task 022)
+
+The gateway uses `src/main.ts` / `AppModule`; attendance uses `src/attendance-main.ts` / `AttendanceAppModule` with `NestFactory.createMicroservice()` and `Transport.TCP`. These are separate OS processes. Attendance imports the database, runtime and focused access-token provider, with no gateway controllers, login endpoints or HTTP filters/guards. Each owns and closes its own SQL pool. `@nestjs/microservices` is pinned to 12.3.3, matching core/common/platform-express; its declared Nest peers accept 12.x.
+
+Build once, then start each process in a separate terminal:
+
+```sh
+npm run build
+npm run start:prod
+npm run start:attendance
+```
+
+For simultaneous development, run **one** build watcher and two Node watchers, each in its own terminal. Wait for the first successful build before starting the Node watchers:
+
+```sh
+npm run build:watch
+npm run start:gateway:dev
+npm run start:attendance:dev
+```
+
+`start:dev` remains the gateway-only Nest watcher. Do not run it alongside `build:watch`; both write `dist/`. Use Ctrl-C or SIGTERM for each process to release listeners and pools. Migrations remain one explicit operator-controlled CLI, run before either app; neither startup applies migrations. Auth, employee/organization and profile-file HTTP operations do not connect to attendance or wait for it at startup. Task 023 adds the gateway client and public failure mapping.
+
+| Setting | Constraint/default |
+| --- | --- |
+| `ATTENDANCE_RPC_HOST` | `127.0.0.1` (default) or `::1` only; no wildcard, hostname or remote IP |
+| `ATTENDANCE_RPC_PORT` | Independent port, default 4001, range 1–65535 |
+| `ATTENDANCE_RPC_CREDENTIAL` | Required for attendance; separate non-placeholder server secret of 32–256 UTF-8 bytes; must differ from JWT secret |
+| `ATTENDANCE_RPC_DEADLINE_MS` | Finite gateway wait budget, default 5000, range 100–60000 ms; consumed by the client in task 023 |
+
+Generate a separate random credential using the command above. Never expose it, the JWT secret, or private paths to the web client. Loopback is the accepted same-host trust boundary; remote deployment requires a new TLS/network/storage decision.
+
+### Internal v1 protocol
+
+`src/attendance-rpc/rpc.contract.ts` defines the pattern constants and named envelopes. `rpc.inputs.ts` defines scalar/nested validation DTOs. `rpc.responses.ts` contains response types derived from the active public schemas without changing them; keep these types aligned with approved contract changes. This is an internal TypeScript contract, not another public HTTP schema.
+
+A request is `{version: 1, requestId, serviceCredential, accessToken, input}`. `requestId` is the original UUID correlation ID, `accessToken` is the original stateless access JWT, and write envelopes additionally require the original UUID `idempotencyKey`. The check-in envelope reserves `fullUploadReceivedAt` (ISO instant) and `stagedImage`; task 024 defines and validates the descriptor. No image buffers/base64, request/Multer objects, entities, SQL managers or client-supplied paths cross TCP. Staging IDs and transport fields must stay out of command fingerprints.
+
+| Pattern prefix `attendance.v1.` | Input / response | Handler owner |
+| --- | --- | --- |
+| `schedule.get` | EmptyInput / WorkSchedule | 016 |
+| `time-zones.list` | TimeZonesInput / TimeZoneChoices | 016 |
+| `schedule.preview`, `schedule.change` | ScheduleInput / SchedulePreview, ScheduleChanged | 016 |
+| `schedule.versions` | PageInput / ScheduleHistoryPage | 016 |
+| `holidays.get` | HolidayYearInput / HolidayCalendar | 017 |
+| `holidays.preview`, `holidays.change` | HolidayChangeInput / ChangeImpact, HolidayChanged | 017 |
+| `home.get` | EmptyInput / Home | 018 |
+| `check-in` | CheckInEnvelope with descriptor from 024 / Attendance | 018, 024 |
+| `check-out` | CheckOutInput / Attendance | 018 |
+| `days.list` | AttendanceDaysInput / AttendanceDayPage | 019 |
+| `record.get`, `hr-record.get` | AttendanceRecordInput / Attendance | 019 |
+| `monitoring.list` | MonitoringInput / MonitoringPage | 019 |
+| `file-access`, `command-outcome` | Reserved patterns; request/result DTOs and authorization defined by 024 | 024 |
+
+No production business handler or probe endpoint is registered by task 022. Owning feature tasks register `@MessagePattern(ATTENDANCE_PATTERNS...)` handlers, use concrete class DTOs with `@Payload('input')`, and obtain verified actor claims through `rpcActor(@Ctx() context)`. The standalone global pipeline validates envelope/version/key, authenticates the gateway credential and JWT, checks HRD claims for HR patterns, then validates the input DTO **once** before handler/runner execution. DTOs reject unknown fields, null optional values, implicit scalar coercion, malformed UUID/date/time strings and out-of-bound arrays/pages/queries. Domain decisions (supported IANA zones, date ranges, holiday consistency, scheduling rules) remain owning service work. No role/status DB lookup or revocation is introduced.
+
+RPC faults are `{version: 1, code, message}`. Foundation codes are `RPC_INVALID_ENVELOPE`, `RPC_UNSUPPORTED_VERSION`, `RPC_UNAUTHORIZED`, `RPC_FORBIDDEN`, `RPC_VALIDATION_FAILED`, `RPC_RESPONSE_TOO_LARGE`, `RPC_INTERNAL_ERROR`; unexpected errors and arbitrary exception text are sanitized. Public HTTP Problems, token challenges and domain-fault mapping are task 023 work. Attendance startup diagnostics exclude settings' values and driver errors.
+
+The Nest TCP frame buffer is capped at 256 Ki characters; envelope validation also caps JSON at 256 KiB UTF-8. The response serializer caps the entire response packet at 2 MiB UTF-8, returning a bounded fault on overflow. Partial frames have a 5-second idle / 10-second total receive limit; non-reading peers have a 2 MiB send-buffer cap and 5-second drain limit. Clients must use `send()` request-response and the configured finite deadline. A timeout does not cancel a write or prove rollback; attendance mutations/receipts stay process-local and uncertain image/outcome recovery belongs to task 024. There is no gateway SQL transaction around TCP.
+
+The integration suite uses test-only handlers over real TCP/MySQL and starts both production entry points as separate processes. It checks credential/JWT/version/DTO rejection before handler work, response redaction and bounds, oversized frame rejection, occupied-port failure, SQL/socket shutdown, reconnect, and gateway HTTP availability with attendance absent. These are foundation checks; real business concurrency and cross-process evidence remain tasks 020/021.
