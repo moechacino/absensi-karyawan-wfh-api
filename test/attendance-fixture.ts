@@ -32,7 +32,13 @@ import {
 
 export async function control(
   child: ChildProcess,
-  values: { at?: string; hold?: boolean; dropReply?: boolean },
+  values: {
+    at?: string;
+    hold?: boolean;
+    dropReply?: boolean;
+    readDelayMs?: number;
+    holdRead?: boolean;
+  },
 ): Promise<void> {
   const id = randomUUID();
   const ack = processMessage<{ id: string }>(
@@ -112,6 +118,12 @@ export async function attendanceApps() {
     }
   }
 
+  async function restartAttendance(): Promise<void> {
+    await stopProcess(attendance);
+    attendance = await startAttendance();
+    await control(attendance, { at: now.toISOString() });
+  }
+
   async function reset(): Promise<void> {
     if (attendance.exitCode !== null || attendance.signalCode !== null) {
       attendance = await startAttendance();
@@ -127,7 +139,7 @@ export async function attendanceApps() {
   }
 
   async function clean(): Promise<void> {
-    await control(attendance, { hold: false });
+    await control(attendance, { hold: false, holdRead: false, readDelayMs: 0 });
     await stopProcess(attendance);
     const employees = In([ids.employee, ids.otherEmployee]);
     await source.manager.delete(IdempotencyOperationEntity, {
@@ -244,6 +256,7 @@ export async function attendanceApps() {
     checkOut,
     setTime,
     snapshotCounts,
+    restartAttendance,
     token,
     get attendance() {
       return attendance;

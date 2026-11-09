@@ -122,15 +122,13 @@ export class HolidayChangeInput extends HolidayYearInput {
 }
 
 export class AttendanceDaysInput extends PageInput {
-  @ValidateIf((_object, value) => value !== undefined)
   @Matches(/^\d{4}-\d{2}-\d{2}$/)
   @IsDateString({ strict: true })
-  from?: string;
+  from: string;
 
-  @ValidateIf((_object, value) => value !== undefined)
   @Matches(/^\d{4}-\d{2}-\d{2}$/)
   @IsDateString({ strict: true })
-  to?: string;
+  to: string;
 }
 
 export class AttendanceRecordInput {
@@ -156,10 +154,9 @@ export class MonitoringInput extends PageInput {
   @MaxLength(160)
   q?: string;
 
-  @ValidateIf((_object, value) => value !== undefined)
   @Matches(/^\d{4}-\d{2}-\d{2}$/)
   @IsDateString({ strict: true })
-  date?: string;
+  date: string;
 
   @ValidateIf((_object, value) => value !== undefined)
   @IsUUID()

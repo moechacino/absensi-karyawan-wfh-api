@@ -1,3 +1,4 @@
+import { AttendanceReadModule } from './attendance-reads/attendance-read.module';
 import { AttendanceFileModule } from './attendance-files/attendance-file.module';
 import { AttendanceModule } from './attendance/attendance.module';
 import { Module } from '@nestjs/common';
@@ -11,6 +12,7 @@ import { HolidayModule } from './holidays/holiday.module';
 // Feature tasks add attendance/calendar providers here, never gateway AppModule.
 @Module({
   imports: [
+    AttendanceReadModule,
     AttendanceModule,
     AttendanceFileModule,
     HolidayModule,

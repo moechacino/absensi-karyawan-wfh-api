@@ -1,3 +1,4 @@
+import { AttendanceReadGatewayModule } from './attendance-reads/attendance-read.gateway-module';
 import { AttendanceGatewayModule } from './attendance/attendance.gateway-module';
 import { Module } from '@nestjs/common';
 
@@ -15,6 +16,7 @@ import { HolidayGatewayModule } from './holidays/holiday.gateway-module';
 
 @Module({
   imports: [
+    AttendanceReadGatewayModule,
     AttendanceGatewayModule,
     HolidayGatewayModule,
     RuntimeModule,

@@ -6,13 +6,19 @@ import type { StagedCheckInImage } from '../src/attendance-rpc/rpc.files';
 
 const queries = new WeakMap<
   ChildProcess,
-  { attendanceReads: number; fileReads: number; reads: number }
+  {
+    attendanceReads: number;
+    fileReads: number;
+    reads: number;
+    credentialReads: number;
+  }
 >();
 
 export function queryCounts(child: ChildProcess): {
   attendanceReads: number;
   fileReads: number;
   reads: number;
+  credentialReads: number;
 } {
   return { ...queries.get(child)! };
 }
@@ -87,7 +93,12 @@ export async function startProcess(
       stdio: ['ignore', 'ignore', 'pipe', 'ipc'],
     },
   );
-  const counts = { attendanceReads: 0, fileReads: 0, reads: 0 };
+  const counts = {
+    attendanceReads: 0,
+    fileReads: 0,
+    reads: 0,
+    credentialReads: 0,
+  };
   queries.set(child, counts);
   child.on('message', (value: unknown) => {
     if (
@@ -97,6 +108,10 @@ export async function startProcess(
       value.event === 'query'
     ) {
       counts.reads++;
+
+      if ('credentialRead' in value && value.credentialRead) {
+        counts.credentialReads++;
+      }
       if ('attendanceRead' in value && value.attendanceRead) {
         counts.attendanceReads++;
       }

@@ -10,7 +10,10 @@ import { APP_INTERCEPTOR } from '@nestjs/core';
 import { Test } from '@nestjs/testing';
 import type { TcpContext } from '@nestjs/microservices';
 import type { NestExpressApplication } from '@nestjs/platform-express';
-import { tap } from 'rxjs';
+import { tap, delay } from 'rxjs';
+import { MonitoringRepository } from '../src/attendance-reads/monitoring.repository';
+import type { MonitoringInput } from '../src/attendance-rpc/rpc.inputs';
+import type { DatedContext } from '../src/attendance-reads/attendance-read.rules';
 import { DataSource } from 'typeorm';
 import type { EntityManager } from 'typeorm';
 import { AppModule } from '../src/app.module';
@@ -35,6 +38,9 @@ class TestClock extends Clock {
 class ProbeState {
   hold = false;
   dropReply = false;
+  readDelayMs = 0;
+  holdRead = false;
+  releaseRead?: () => void;
   release?: () => void;
 }
 
@@ -82,11 +88,41 @@ class PausedRepository extends AttendanceRepository {
 }
 
 @Injectable()
+class PausedMonitoringRepository extends MonitoringRepository {
+  constructor(private readonly state: ProbeState) {
+    super();
+  }
+
+  override async selected(
+    input: MonitoringInput,
+    context: DatedContext,
+    manager: EntityManager,
+  ) {
+    const result = await super.selected(input, context, manager);
+
+    if (this.state.holdRead) {
+      const gate = new Promise<void>((resolve) => {
+        this.state.releaseRead = resolve;
+      });
+      process.send?.({ event: 'monitoring-selected' });
+      await gate;
+    }
+
+    return result;
+  }
+}
+
+@Injectable()
 class LoseReplyInterceptor implements NestInterceptor {
   constructor(private readonly state: ProbeState) {}
 
   intercept(context: ExecutionContext, next: CallHandler) {
+    const write = context
+      .switchToRpc()
+      .getData<{ idempotencyKey?: string }>().idempotencyKey;
+
     return next.handle().pipe(
+      delay(write ? 0 : this.state.readDelayMs),
       tap((result: unknown) => {
         if (
           this.state.dropReply &&
@@ -127,6 +163,9 @@ async function main(): Promise<void> {
 
   if (attendance) {
     builder.overrideProvider(AttendanceRepository).useClass(PausedRepository);
+    builder
+      .overrideProvider(MonitoringRepository)
+      .useClass(PausedMonitoringRepository);
   }
 
   const module = await builder.compile();
@@ -143,6 +182,10 @@ async function main(): Promise<void> {
         event: 'query',
         attendanceRead: /\battendances\b/.test(query),
         fileRead: /\bfile_objects\b/.test(query),
+        credentialRead:
+          /initial_password|password_hash|has_password_changed|\bemail\b/i.test(
+            query,
+          ),
       });
     }
   };
@@ -163,6 +206,8 @@ async function main(): Promise<void> {
       at?: string;
       hold?: boolean;
       dropReply?: boolean;
+      readDelayMs?: number;
+      holdRead?: boolean;
       id?: string;
     }) => {
       if (message.event !== 'control') {
@@ -182,6 +227,19 @@ async function main(): Promise<void> {
           if (!state.hold) {
             state.release?.();
             state.release = undefined;
+          }
+        }
+
+        if (message.readDelayMs !== undefined) {
+          state.readDelayMs = message.readDelayMs;
+        }
+
+        if (message.holdRead !== undefined) {
+          state.holdRead = message.holdRead;
+
+          if (!state.holdRead) {
+            state.releaseRead?.();
+            state.releaseRead = undefined;
           }
         }
 
