@@ -46,13 +46,14 @@ export class ScheduleClock extends Clock {
 
 class DropCommittedReply implements NestInterceptor {
   dropNext = false;
+  pattern: string = patterns.scheduleChange;
 
   intercept(context: ExecutionContext, next: CallHandler) {
     return next.handle().pipe(
       tap(() => {
         const tcp = context.switchToRpc().getContext<TcpContext>();
 
-        if (this.dropNext && tcp.getPattern() === patterns.scheduleChange) {
+        if (this.dropNext && tcp.getPattern() === this.pattern) {
           this.dropNext = false;
           tcp.getSocketRef().netSocket.destroy();
         }

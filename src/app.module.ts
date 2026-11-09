@@ -10,9 +10,11 @@ import { DatabaseModule } from './database/database.module';
 import { RuntimeModule } from './runtime/runtime.module';
 import { ScheduleGatewayModule } from './work-schedule/schedule.gateway-module';
 import { GatewayAttendanceModule } from './gateway-attendance/gateway-attendance.module';
+import { HolidayGatewayModule } from './holidays/holiday.gateway-module';
 
 @Module({
   imports: [
+    HolidayGatewayModule,
     RuntimeModule,
     GatewayAttendanceModule,
     ScheduleGatewayModule,

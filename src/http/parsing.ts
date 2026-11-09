@@ -37,7 +37,7 @@ export function multipartBoolean(
   return invalid(field);
 }
 
-function queryInteger(value: unknown, field: string): number {
+export function queryInteger(value: unknown, field: string): number {
   if (typeof value !== 'string' || !/^[1-9]\d*$/.test(value))
     return invalid(field);
   const result = Number(value);

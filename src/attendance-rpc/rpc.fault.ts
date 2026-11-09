@@ -119,6 +119,11 @@ export const rpcFaultDefinitions = {
     status: 422,
     message: 'Local time is ambiguous or does not exist',
   },
+  HOLIDAY_BATCH_INVALID: {
+    kind: 'business',
+    status: 422,
+    message: 'Invalid holiday batch',
+  },
   DUPLICATE_DATE: {
     kind: 'business',
     status: 422,

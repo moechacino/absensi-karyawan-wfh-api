@@ -9,6 +9,6 @@ import { CalendarService } from './calendar.service';
 @Module({
   imports: [RuntimeModule, DatabaseModule],
   providers: [CalendarRepository, CalendarService],
-  exports: [CalendarService],
+  exports: [CalendarService, CalendarRepository],
 })
 export class WorkCalendarModule {}
