@@ -114,6 +114,11 @@ export const rpcFaultDefinitions = {
     status: 422,
     message: 'Unsupported time zone',
   },
+  INVALID_LOCAL_TIME: {
+    kind: 'business',
+    status: 422,
+    message: 'Local time is ambiguous or does not exist',
+  },
   DUPLICATE_DATE: {
     kind: 'business',
     status: 422,
