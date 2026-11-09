@@ -1,15 +1,18 @@
 import { randomUUID } from 'node:crypto';
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import type { EntityManager } from 'typeorm';
 import type { ReadStream } from 'node:fs';
-import { RUNTIME_CONFIG } from '../runtime/runtime.config';
-import type { RuntimeConfig } from '../runtime/runtime.config';
 import { ProblemException } from '../http/problem';
 import type { Actor } from '../auth/access-token.service';
 import { FileRepository } from './file.repository';
 import { StorageService } from './storage.service';
 import { ImageService } from './image.service';
-import type { ImageInput, ImagePurpose, StagedImage } from './file.types';
+import type {
+  ImageInput,
+  ImagePurpose,
+  StagedImage,
+  FileUpload,
+} from './file.types';
 
 export interface FileContent {
   stream: ReadStream;
@@ -21,30 +24,59 @@ export interface FileContent {
 @Injectable()
 export class FileService {
   private readonly logger = new Logger(FileService.name);
-  private active = 0;
 
   constructor(
     private readonly repository: FileRepository,
     private readonly storage: StorageService,
     private readonly images: ImageService,
-    @Inject(RUNTIME_CONFIG) private readonly config: RuntimeConfig,
   ) {}
 
-  // Wrap the complete owning command (including commit/idempotency replay), not an inner transaction callback.
+  // The callback must resolve only after its owning SQL/idempotency command commits or replays.
+  // Use FileUploadInterceptor before multipart parsing on public upload routes.
 
-  async withStagedImage<T>(
+  async withAtomicFiles<T>(
+    uploads: readonly FileUpload[],
+    command: (files: readonly StagedImage[]) => Promise<T>,
+  ): Promise<T> {
+    // Drain every independent stage before cleanup, including when one upload fails.
+    const results = await Promise.allSettled(
+      uploads.map((upload) => this.stage(upload)),
+    );
+    const staged = results
+      .filter((result) => result.status === 'fulfilled')
+      .map((result) => result.value);
+
+    try {
+      const failure = results.find((result) => result.status === 'rejected');
+
+      if (failure) {
+        throw failure.reason;
+      }
+
+      return await command(staged);
+    } finally {
+      await Promise.all(staged.map((file) => this.cleanup(file)));
+    }
+  }
+
+  // Existing single-image callers share the same staging/cleanup implementation.
+
+  withStagedImage<T>(
     input: ImageInput,
     ownerEmployeeId: string,
     purpose: ImagePurpose,
     command: (file: StagedImage) => Promise<T>,
   ): Promise<T> {
-    if (this.active >= this.config.storage.maxConcurrentUploads) {
-      throw new ProblemException(429, 'UPLOAD_LIMIT', 'Too many uploads', {
-        retryAfter: 1,
-      });
-    }
+    return this.withAtomicFiles(
+      [{ input, ownerEmployeeId, purpose }],
+      ([file]) => command(file),
+    );
+  }
 
-    if (!['CHECK_IN_PHOTO', 'EMPLOYEE_PROFILE_PHOTO'].includes(purpose)) {
+  private async stage(upload: FileUpload): Promise<StagedImage> {
+    if (
+      !['CHECK_IN_PHOTO', 'EMPLOYEE_PROFILE_PHOTO'].includes(upload.purpose)
+    ) {
       throw new ProblemException(
         422,
         'INVALID_FILE_PURPOSE',
@@ -52,38 +84,21 @@ export class FileService {
       );
     }
 
-    this.active++;
-    let staged: StagedImage | undefined;
-    let written = false;
+    const image = await this.images.validate(upload.input);
+    const id = randomUUID();
+    const staged: StagedImage = {
+      id,
+      objectKey: `${id}.${image.extension}`,
+      ownerEmployeeId: upload.ownerEmployeeId,
+      purpose: upload.purpose,
+      fileName: image.fileName,
+      mimeType: image.mimeType,
+      sizeBytes: image.bytes.length,
+      sha256: image.sha256,
+    };
+    await this.storage.put(staged.objectKey, image.bytes);
 
-    try {
-      const image = await this.images.validate(input);
-      const id = randomUUID();
-      staged = {
-        id,
-        objectKey: `${id}.${image.extension}`,
-        ownerEmployeeId,
-        purpose,
-        fileName: image.fileName,
-        mimeType: image.mimeType,
-        sizeBytes: image.bytes.length,
-        sha256: image.sha256,
-      };
-      await this.storage.put(staged.objectKey, image.bytes);
-      written = true;
-      const result = await command(staged);
-      await this.cleanup(staged);
-
-      return result;
-    } catch (error) {
-      if (staged && written) {
-        await this.cleanup(staged);
-      }
-
-      throw error;
-    } finally {
-      this.active--;
-    }
+    return staged;
   }
 
   attach(manager: EntityManager, staged: StagedImage): Promise<void> {

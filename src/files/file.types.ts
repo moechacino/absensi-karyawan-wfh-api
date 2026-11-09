@@ -23,3 +23,10 @@ export interface StagedImage {
   sizeBytes: number;
   sha256: string;
 }
+
+// Current policies accept images. New document policies can reuse the command lifecycle.
+export interface FileUpload {
+  input: ImageInput;
+  ownerEmployeeId: string;
+  purpose: ImagePurpose;
+}

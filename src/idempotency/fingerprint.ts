@@ -96,6 +96,8 @@ export function publicReceipt(body: unknown): JsonObject {
 
     if (value !== null && typeof value === 'object') {
       for (const [key, item] of Object.entries(value)) {
+        if (key === 'hasPasswordChanged' && typeof item === 'boolean') continue;
+
         if (
           /password|secret|token|authorization|initialcredentials|objectkey|storagekey|localpath|privatekey/i.test(
             key.replace(/[^a-z]/gi, ''),

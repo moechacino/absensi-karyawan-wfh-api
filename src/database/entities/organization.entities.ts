@@ -1,4 +1,13 @@
-import { Column, Entity, ForeignKey, Index, PrimaryColumn } from 'typeorm';
+import {
+  Column,
+  Entity,
+  ForeignKey,
+  Index,
+  PrimaryColumn,
+  ManyToOne,
+  JoinColumn,
+} from 'typeorm';
+import type { Relation } from 'typeorm';
 
 @Index('uq_division_code', ['code'], { unique: true })
 @Entity('divisions')
@@ -115,4 +124,12 @@ export class PositionEntity {
     default: () => 'CURRENT_TIMESTAMP(3)',
   })
   updatedAt: Date;
+
+  @ManyToOne('DivisionEntity', {
+    nullable: false,
+    createForeignKeyConstraints: false,
+    persistence: false,
+  })
+  @JoinColumn({ name: 'division_id', referencedColumnName: 'id' })
+  division: Relation<DivisionEntity>;
 }

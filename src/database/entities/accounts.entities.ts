@@ -1,4 +1,15 @@
-import { Column, Entity, ForeignKey, Index, PrimaryColumn } from 'typeorm';
+import {
+  Column,
+  Entity,
+  ForeignKey,
+  Index,
+  PrimaryColumn,
+  ManyToOne,
+  JoinColumn,
+} from 'typeorm';
+import type { Relation } from 'typeorm';
+import type { DivisionEntity, PositionEntity } from './organization.entities';
+import type { FileObjectEntity } from './files.entities';
 
 @Index('uq_employee_email', ['email'], { unique: true })
 @Index('ix_employee_name', ['fullName', 'id'])
@@ -129,4 +140,28 @@ export class EmployeeEntity {
     select: false,
   })
   passwordHash: string | null;
+
+  @ManyToOne('DivisionEntity', {
+    nullable: false,
+    createForeignKeyConstraints: false,
+    persistence: false,
+  })
+  @JoinColumn({ name: 'division_id', referencedColumnName: 'id' })
+  division: Relation<DivisionEntity>;
+
+  @ManyToOne('PositionEntity', {
+    nullable: false,
+    createForeignKeyConstraints: false,
+    persistence: false,
+  })
+  @JoinColumn({ name: 'position_id', referencedColumnName: 'id' })
+  position: Relation<PositionEntity>;
+
+  @ManyToOne('FileObjectEntity', {
+    nullable: true,
+    createForeignKeyConstraints: false,
+    persistence: false,
+  })
+  @JoinColumn({ name: 'photo_file_id', referencedColumnName: 'id' })
+  photo: Relation<FileObjectEntity> | null;
 }

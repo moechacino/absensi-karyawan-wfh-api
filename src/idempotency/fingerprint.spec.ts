@@ -42,6 +42,7 @@ describe('idempotency inputs and nonsecret receipts', () => {
     const receipt = publicReceipt(original);
     expect(receipt).toEqual(original);
     expect(receipt).not.toBe(original);
+
     for (const key of [
       'password',
       'password_hash',
@@ -54,6 +55,11 @@ describe('idempotency inputs and nonsecret receipts', () => {
       expect(() =>
         publicReceipt({ nested: { [key]: 'private-marker' } }),
       ).toThrow('cannot be cached');
+
+    expect(publicReceipt({ hasPasswordChanged: false })).toEqual({
+      hasPasswordChanged: false,
+    });
+    expect(() => publicReceipt({ hasPasswordChanged: 'secret' })).toThrow();
     expect(() => publicReceipt(null)).toThrow();
   });
 });

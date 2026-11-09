@@ -1,3 +1,4 @@
+import { EmployeeModule } from './employees/employee.module';
 import { OrganizationModule } from './organization/organization.module';
 import { FileModule } from './files/file.module';
 import { AuthModule } from './auth/auth.module';
@@ -16,6 +17,7 @@ import { RuntimeModule } from './runtime/runtime.module';
     AuthModule,
     FileModule,
     OrganizationModule,
+    EmployeeModule,
   ],
 })
 export class AppModule {}
