@@ -17,6 +17,8 @@ import type { ClientProxy, TcpContext } from '@nestjs/microservices';
 import { firstValueFrom, timeout } from 'rxjs';
 import { DataSource } from 'typeorm';
 
+import { AttendanceRpcModule } from '../src/attendance-rpc/rpc.module';
+import { DatabaseModule } from '../src/database/database.module';
 import { AttendanceAppModule } from '../src/attendance-app.module';
 import { AccessTokenService } from '../src/auth/access-token.service';
 import { ATTENDANCE_PATTERNS as patterns } from '../src/attendance-rpc/rpc.contract';
@@ -64,7 +66,10 @@ class ProbeController {
   }
 }
 
-@Module({ imports: [AttendanceAppModule], controllers: [ProbeController] })
+@Module({
+  imports: [AttendanceRpcModule, DatabaseModule],
+  controllers: [ProbeController],
+})
 class ProbeModule {}
 
 async function freePort(): Promise<number> {

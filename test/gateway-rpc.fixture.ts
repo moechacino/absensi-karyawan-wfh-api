@@ -19,7 +19,8 @@ import { DataSource } from 'typeorm';
 import type { EntityManager } from 'typeorm';
 
 import { AppModule } from '../src/app.module';
-import { AttendanceAppModule } from '../src/attendance-app.module';
+import { AttendanceRpcModule } from '../src/attendance-rpc/rpc.module';
+import { DatabaseModule } from '../src/database/database.module';
 import { AuthModule } from '../src/auth/auth.module';
 import { AuthGuard } from '../src/auth/auth.guard';
 import type { AuthenticatedRequest } from '../src/auth/auth.guard';
@@ -264,7 +265,7 @@ class GatewayBoundaryProbe {
 }
 
 @Module({
-  imports: [AttendanceAppModule, IdempotencyModule],
+  imports: [AttendanceRpcModule, DatabaseModule, IdempotencyModule],
   controllers: [RpcBoundaryProbe],
   providers: [ProbeState, ProbeRepository, ProbeService, ProbeOwnerGuard],
 })

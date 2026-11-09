@@ -8,12 +8,14 @@ import { IdempotencyModule } from './idempotency/idempotency.module';
 import { HttpModule } from './http/http.module';
 import { DatabaseModule } from './database/database.module';
 import { RuntimeModule } from './runtime/runtime.module';
+import { ScheduleGatewayModule } from './work-schedule/schedule.gateway-module';
 import { GatewayAttendanceModule } from './gateway-attendance/gateway-attendance.module';
 
 @Module({
   imports: [
     RuntimeModule,
     GatewayAttendanceModule,
+    ScheduleGatewayModule,
     DatabaseModule,
     HttpModule,
     IdempotencyModule,

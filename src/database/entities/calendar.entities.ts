@@ -1,4 +1,16 @@
-import { Column, Entity, ForeignKey, Index, PrimaryColumn } from 'typeorm';
+import {
+  Column,
+  Entity,
+  ForeignKey,
+  Index,
+  PrimaryColumn,
+  ManyToOne,
+  JoinColumn,
+} from 'typeorm';
+
+import type { Relation } from 'typeorm';
+
+import type { EmployeeEntity } from './accounts.entities';
 
 @Entity('calendar_state')
 export class CalendarStateEntity {
@@ -76,6 +88,14 @@ export class ScheduleVersionEntity {
     collation: 'ascii_bin',
   })
   createdBy: string;
+
+  @ManyToOne('EmployeeEntity', {
+    nullable: false,
+    createForeignKeyConstraints: false,
+    persistence: false,
+  })
+  @JoinColumn({ name: 'created_by', referencedColumnName: 'id' })
+  actor: Relation<EmployeeEntity>;
 }
 
 @Index('ix_schedule_event_time', ['createdAt', 'id'])

@@ -6,6 +6,7 @@ import { AuthService } from './auth.service';
 import { AuthRepository } from './auth.repository';
 import { PasswordService } from './password.service';
 import { AuthGuard, JsonBodyGuard } from './auth.guard';
+import { HrGuard } from './hr.guard';
 import { LoginThrottle } from './login-throttle.service';
 
 @Module({
@@ -16,9 +17,10 @@ import { LoginThrottle } from './login-throttle.service';
     AuthRepository,
     PasswordService,
     AuthGuard,
+    HrGuard,
     JsonBodyGuard,
     LoginThrottle,
   ],
-  exports: [AuthGuard, AccessTokenModule],
+  exports: [AuthGuard, HrGuard, JsonBodyGuard, AccessTokenModule],
 })
 export class AuthModule {}
