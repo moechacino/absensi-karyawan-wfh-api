@@ -1,0 +1,138 @@
+name: absensi-wfh
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-app: &app
+  image: absensi-wfh-api:local
+  build: .
+  network_mode: host
+  init: true
+  user: "1000:1000"
+  read_only: true
+  tmpfs:
+    - /tmp
+  cap_drop:
+    - ALL
+  security_opt:
+    - no-new-privileges:true
+  stop_grace_period: 30s
+  logging: *logging
+  volumes:
+    - private_files:/var/lib/absensi/files
+  environment:
+    NODE_ENV: production
+    HOST: 127.0.0.1
+    PORT: ${PORT:-3000}
+    DB_HOST: 127.0.0.1
+    DB_PORT: ${MYSQL_PORT:-3307}
+    DB_NAME: ${DB_NAME:?Set DB_NAME in .env.docker}
+    DB_USERNAME: ${DB_USERNAME:?Set DB_USERNAME in .env.docker}
+    DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env.docker}
+    DB_POOL_SIZE: ${DB_POOL_SIZE:-10}
+    DB_CONNECT_TIMEOUT_MS: 10000
+    JWT_ALGORITHM: HS256
+    JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env.docker}
+    JWT_ISSUER: ${JWT_ISSUER:-absensi-wfh-api}
+    JWT_AUDIENCE: ${JWT_AUDIENCE:-absensi-wfh-web}
+    JWT_ACCESS_TTL_SECONDS: 3600
+    CORS_ORIGINS: ${CORS_ORIGINS:?Set the HTTPS frontend origin}
+    CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:?Set the HTTPS frontend origin}
+    STORAGE_ROOT: /var/lib/absensi/files
+    MAX_FILE_BYTES: 5242880
+    MAX_CONCURRENT_UPLOADS: ${MAX_CONCURRENT_UPLOADS:-4}
+    IDEMPOTENCY_RETENTION_SECONDS: ${IDEMPOTENCY_RETENTION_SECONDS:-86400}
+    ATTENDANCE_RPC_HOST: 127.0.0.1
+    ATTENDANCE_RPC_PORT: ${ATTENDANCE_RPC_PORT:-4001}
+    ATTENDANCE_RPC_CREDENTIAL: ${ATTENDANCE_RPC_CREDENTIAL:?Set the RPC secret in .env.docker}
+    ATTENDANCE_RPC_DEADLINE_MS: ${ATTENDANCE_RPC_DEADLINE_MS:-5000}
+  depends_on:
+    mysql:
+      condition: service_healthy
+    storage-init:
+      condition: service_completed_successfully
+
+services:
+  mysql:
+    image: mysql:8.4.13
+    restart: unless-stopped
+    command: ["--default-time-zone=+00:00"]
+    ports:
+      - "127.0.0.1:${MYSQL_PORT:-3307}:3306"
+    environment:
+      MYSQL_DATABASE: ${DB_NAME:?Set DB_NAME in .env.docker}
+      MYSQL_USER: ${DB_USERNAME:?Set DB_USERNAME in .env.docker}
+      MYSQL_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env.docker}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD in .env.docker}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - MYSQL_PWD="$${MYSQL_PASSWORD}" mysql --protocol=TCP -h127.0.0.1 -u"$${MYSQL_USER}" "$${MYSQL_DATABASE}" -e 'SELECT 1'
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+    logging: *logging
+
+  storage-init:
+    image: absensi-wfh-api:local
+    build: .
+    user: "0:0"
+    network_mode: none
+    restart: "no"
+    command: ["sh", "-c", "chown 1000:1000 /var/lib/absensi/files && chmod 700 /var/lib/absensi/files"]
+    volumes:
+      - private_files:/var/lib/absensi/files
+    logging: *logging
+
+  attendance:
+    <<: *app
+    restart: unless-stopped
+    command: ["node", "--enable-source-maps", "dist/attendance-main.js"]
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "const s=require('node:net').connect(Number(process.env.ATTENDANCE_RPC_PORT),'127.0.0.1');s.setTimeout(2000);s.on('connect',()=>{s.end();process.exit(0)});s.on('error',()=>process.exit(1));s.on('timeout',()=>process.exit(1));"
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  gateway:
+    <<: *app
+    restart: unless-stopped
+    command: ["node", "--enable-source-maps", "dist/main.js"]
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "require('node:http').get('http://127.0.0.1:'+process.env.PORT+'/api/v1/me',r=>{r.resume();process.exit(r.statusCode===401?0:1)}).on('error',()=>process.exit(1)).setTimeout(2000,()=>process.exit(1));"
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  migrate:
+    <<: *app
+    profiles: [tools]
+    restart: "no"
+    command: ["node", "node_modules/typeorm/cli.js", "migration:run", "-d", "dist/database/cli-data-source.js"]
+
+  operations:
+    <<: *app
+    profiles: [tools]
+    restart: "no"
+    entrypoint: ["node", "dist/operations-main.js"]
+    command: []
+
+volumes:
+  mysql_data:
+  private_files:

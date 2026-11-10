@@ -59,6 +59,8 @@ flowchart TD
 
 ## Quick Start
 
+For Linux production hosting, [compose.yaml](compose.yaml) runs the gateway, TCP attendance service, and MySQL 8.4 separately from any existing server MariaDB installation.
+
 Requires Node.js **26.13.x**, npm **11.20.x**, and MySQL **8.4**. Create an empty database and a database user, with MySQL configured for UTC. Run these commands from `api-server/`:
 
 ```sh
