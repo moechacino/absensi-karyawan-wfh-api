@@ -54,6 +54,7 @@ describe('operations input', () => {
   it.each([
     ['provision-first-hrd', '--confirm-empty-installation'],
     ['seed-development', '--confirm-fictional-data'],
+    ['seed-people', '--confirm-fictional-data'],
     ['cleanup-receipts', '1'],
     ['cleanup-receipts', '1000'],
   ])('accepts an explicit command %s %s', (...args) => {
@@ -64,6 +65,7 @@ describe('operations input', () => {
     [],
     ['provision-first-hrd'],
     ['seed-development'],
+    ['seed-people'],
     ['seed-development', '--confirm-empty-installation'],
     ['cleanup-receipts', '0'],
     ['cleanup-receipts', '1001'],

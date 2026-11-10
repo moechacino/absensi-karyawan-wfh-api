@@ -385,3 +385,15 @@ For uncertain staged files, first quiesce both writers and establish SQL rollbac
 Build first, then run `npm run test:integration -- --watchman=false --runTestsByPath test/operations.integration-spec.ts` with the isolated test environment described above. The suite refuses any nonempty application table, backs up the empty baseline, and restores it on teardown; never point it at production. Provide MYSQL_BIN/MYSQLDUMP_BIN pointing to native **MySQL 8.4** clients if they are not on PATH. The dedicated test account must be able to dump/restore its schema and create/drop a test trigger. Standard integration tests remain separate from migration/startup behavior.
 
 This rehearsal exercises production `dist` entry points/CLI, concurrent provisioning and rollback, explicit development seeding, attendance outage/restart, real image serving, coordinated SQL+disk restore and replay, bounded cleanup, occupied TCP port, unavailable DB on startup, invalid settings/disk and safe logs. It is not a power-loss/fsync or physical disk-full test; real production identity, supervision, proxy behavior and live DB outage recovery still need deployment rehearsal. Task 020 stays pending until its required native MySQL/TCP checks are actually executed successfully; the task note records current evidence.
+
+## Demo HR and employee seeder
+
+Run `npm run seed` from `api-server/` after migrations. It builds the current source and adds **40 fictional accounts: 4 HRD and 36 employees**, with 6 divisions and 6 required positions. This command uses the configured development/test database and can run after you have already provisioned your real first HRD.
+
+```sh
+npm run seed
+```
+
+Login accounts are `demo.hr01@example.test` through `demo.hr04@example.test`, and `demo.employee01@example.test` through `demo.employee36@example.test`. Their initial password is `Demo-Password-12345`. Set `SEED_PASSWORD` in your private `.env` to choose another initial password (8–128 Unicode code points). It applies only to newly created demo accounts.
+
+The divisions are Human Resources, Engineering, Operations, Finance, Sales and Customer Support; their codes start with DEMO-. Reruns insert only missing data and preserve existing names, roles, statuses and changed passwords. Conflicting organization references or deactivated demo masters fail without inserting partial data. All inserts commit together, and concurrent runs serialize using the existing installation lock. The command prints created/skipped counts and does not add schedules, holidays, attendance, images or time-off data. Fictional bulk seeding requires NODE_ENV=development or test; `npm run seed:hr` remains available for production first-HRD provisioning.

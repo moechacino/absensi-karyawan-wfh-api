@@ -70,7 +70,10 @@ export function provisionInput(value: unknown): ProvisionInput {
 }
 
 export type OperationsCommand =
-  'provision-first-hrd' | 'seed-development' | 'cleanup-receipts';
+  | 'provision-first-hrd'
+  | 'seed-development'
+  | 'seed-people'
+  | 'cleanup-receipts';
 
 export function operationsCommand(args: readonly string[]): {
   command: OperationsCommand;
@@ -86,7 +89,7 @@ export function operationsCommand(args: readonly string[]): {
 
   if (
     args.length === 2 &&
-    args[0] === 'seed-development' &&
+    (args[0] === 'seed-development' || args[0] === 'seed-people') &&
     args[1] === '--confirm-fictional-data'
   ) {
     return { command: args[0] };
@@ -102,6 +105,6 @@ export function operationsCommand(args: readonly string[]): {
   }
 
   throw new Error(
-    'Use provision-first-hrd --confirm-empty-installation, seed-development --confirm-fictional-data, or cleanup-receipts <1–1000>.',
+    'Use provision-first-hrd --confirm-empty-installation, seed-development/seed-people --confirm-fictional-data, or cleanup-receipts <1–1000>.',
   );
 }
