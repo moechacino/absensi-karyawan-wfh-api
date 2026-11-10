@@ -23,6 +23,7 @@ async function bootstrap() {
   try {
     app.enableShutdownHooks();
     await app.listen();
+    console.log('Attendance ready.');
   } catch (error) {
     await app.close();
     throw error;

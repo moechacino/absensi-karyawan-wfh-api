@@ -34,7 +34,9 @@
     "start:attendance:dev": "node --watch dist/attendance-main.js",
     "build:watch": "nest build --watch",
     "start:gateway:dev": "node --watch dist/main.js",
-    "typecheck": "tsc --project tsconfig.json --noEmit --incremental false"
+    "typecheck": "tsc --project tsconfig.json --noEmit --incremental false",
+    "operations": "node --env-file-if-exists=.env dist/operations-main.js",
+    "seed:hr": "npm run operations -- provision-first-hrd --confirm-empty-installation"
   },
   "dependencies": {
     "@nestjs/common": "12.3.3",

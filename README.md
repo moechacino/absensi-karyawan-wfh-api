@@ -1,6 +1,6 @@
 # Absensi Karyawan WFH API
 
-NestJS HTTP gateway and separate TCP attendance application, using shared MySQL and private same-host disk. The active public contract is draft 0.8.4. Authentication, employee/organization management and private file delivery run in the gateway. Tasks 022/023 add the attendance runtime, typed gateway client and RPC error boundary; task 016 adds the global schedule routes and service-owned saves; task 017 adds annual holiday batches; home/attendance business handlers remain future tasks. Startup never creates accounts or runs migrations.
+NestJS HTTP gateway and separate TCP attendance application, using shared MySQL and private same-host disk. The active public contract is draft 0.8.5. Authentication, employee/organization management and private file delivery run in the gateway. Tasks 022/023 add the attendance runtime, typed gateway client and RPC error boundary; task 016 adds the global schedule routes and service-owned saves; task 017 adds annual holiday batches; tasks 018/019 provide home, check-in/out, history and HR monitoring. Task 020 adds controlled CLI provisioning and deployment/recovery instructions. Startup never creates accounts or runs migrations.
 
 The shared API source is [contracts](../contracts/README.md). Work and review status live in [the task index](../api-server-tasks/index.md); the selected architecture is in [the technical design](../api-server-tasks/api-server.technical.md).
 
@@ -62,7 +62,10 @@ Verify the server/session setting with `SELECT @@global.time_zone, @@session.tim
 ```sh
 npm run migration:show
 npm run migration:run
-npm run start:dev
+npm run build
+npm run start:prod
+# In a second terminal:
+npm run start:attendance
 ```
 
 ## Environment settings
@@ -76,9 +79,9 @@ npm run start:dev
 | `JWT_ALGORITHM`, `JWT_SECRET`, `JWT_ISSUER`, `JWT_AUDIENCE` | HS256 only in this foundation; real non-placeholder secret required; issuer/audience required |
 | `JWT_ACCESS_TTL_SECONDS` | Fixed 3600 seconds (one hour) |
 | `CORS_ORIGINS`, `CSRF_TRUSTED_ORIGINS` | Separate comma-delimited origin allowlists; no wildcard/path/credential/query; HTTPS only in production; empty means no cross-origin trust |
-| `STORAGE_ROOT` | Required private directory outside the application directory; relative paths resolve from `api-server/`; created with mode 0700 if absent and checked for read/write/traversal access |
-| `MAX_FILE_BYTES`, `MAX_CONCURRENT_UPLOADS` | Defaults to 5 MiB and four uploads; bytes cannot exceed the contract's 5 MiB ceiling; upload enforcement comes with the HTTP/storage tasks |
-| `IDEMPOTENCY_RETENTION_SECONDS` | Default/minimum 86400 seconds; operation retention implementation comes in task 005 |
+| `STORAGE_ROOT` | Required private directory outside the application directory; relative paths resolve from `api-server/`; created with mode 0700 if absent; requires service ownership, owner-only permissions, safe ancestors and a durable write probe |
+| `MAX_FILE_BYTES`, `MAX_CONCURRENT_UPLOADS` | Defaults to 5 MiB and four uploads; bytes cannot exceed the contract's 5 MiB ceiling; enforced by gateway admission and image validation |
+| `IDEMPOTENCY_RETENTION_SECONDS` | Default/minimum 86400 seconds; bounded explicit cleanup is available through the operations CLI |
 
 Password policy defaults are 15–128 characters. Environment policy changes must be reflected in the shared contract and published policy before release. Config validation reports setting names and constraints, never rejected values. Database/storage startup errors are sanitized; use a MySQL client and local operational logs to diagnose the actual service, rather than enabling SQL/credential logging.
 
@@ -91,7 +94,7 @@ npm run build
 npm run start:prod
 ```
 
-The build emits `dist/main.js`; production start executes that file. Startup validates configuration, connects to MySQL without retrying indefinitely, checks/creates the private root, and then listens. Shutdown hooks close Nest and its connection pool. Invalid configuration or an unavailable dependency fails before a successful listen; startup never runs schema synchronization, migrations, registration, or account seeds.
+The build emits `dist/main.js`; production start executes that file. Startup validates configuration, connects to MySQL without retrying indefinitely, checks/creates the private root, and then listens. Shutdown hooks close Nest, RPC clients/listeners and each process’s connection pool. Readiness emits `Gateway ready.` or `Attendance ready.` only after dependencies initialize and its listener binds. Invalid configuration or an unavailable dependency fails before a successful listen; startup never runs schema synchronization, migrations, registration, or account seeds.
 
 Task 003 uses the official TypeORM CLI: `migration:generate`, `migration:create`, `migration:show`, `migration:run`, and guarded `migration:revert`. Generate/show/run/revert build current source first. Update entities, generate/review a migration, register its class, then apply it. The database guide includes exact commands and the manual additions needed for CHECKs/triggers/data changes. Run only one migration process at a time; standard CLI output includes SQL and diagnostics. Startup checks connectivity without validating migration state and never creates or changes tables; run reviewed migrations explicitly before startup. `synchronize` and `migrationsRun` stay false. Read the [database task notes](../api-server-tasks/003-database-schema.md) for the 11-table active schema, migration permissions, append-only protections, empty-baseline rollback, and partial-DDL recovery. Migrations run explicitly before starting the API.
 
@@ -313,3 +316,72 @@ GET `/api/v1/me/attendance-days?from=YYYY-MM-DD&to=YYYY-MM-DD` returns newest-fi
 Review baseline: history includes at most 366 inclusive dates, omits projected pre-creation dates and preserves all actual rows, including imported older records. Dates before saved schedule coverage project UNCONFIGURED. Monitoring includes active accounts created by the selected work date and inactive accounts with an actual record on that date. Account visibility uses current status; historical expected days for inactive accounts are not inferred. Actual states, snapshots, durations, punctuality and photo evidence are preserved across calendar changes.
 
 Monitoring supports `q` (literal UUID/name substring), `divisionId`, primary `status`, `punctuality`, `page` and `pageSize`. Filters apply before pagination and all summary totals; late overlaps WORKING/COMPLETED. Sort is fullName/UUID ascending; page defaults are 1/20, max 100. Employee summaries expose current safe name/division/position/profile references, including inactive masters. Multi-query reads share a consistent snapshot: history four SELECTs, populated monitoring six, actual detail one, with no gateway attendance SQL or credential selection. File metadata retains the existing contentPath; profile bytes remain independent during attendance outage. History/account visibility decisions are documented in shared contract draft 0.8.5 and task 019 for review.
+
+## First-HRD provisioning and operations (task 020)
+
+Use the built gateway-owned CLI once after reviewed migrations, with both writers stopped. It creates one active HRD and its active division/position in one transaction. A lock on the installation singleton serializes concurrent provisioning; a nonempty employee table is refused, including installations containing only inactive employees. Existing accounts and calendars are never reset. Organization-code collisions fail the transaction. Store the operator-chosen initial password according to the existing first-login model; it is replaced by Argon2id on the first password change. Output contains only the employee UUID. Errors omit input, driver details and private paths.
+
+Run the interactive command in a private terminal, including on production:
+
+```sh
+npm run build
+NODE_ENV=production npm run seed:hr
+```
+
+The command asks for HR full name, email, initial password and confirmation, division code/name, and position code/name. Enter your own values at runtime. Both password entries are hidden; Ctrl-C cancels before any database changes. Email is trimmed/lowercased, and initial provisioning passwords require 8–128 Unicode code points without trimming. Self-service password changes retain the contract’s 15–128 policy. No production HR identity or password is embedded in source code. `seed:hr` also works in development/test and delegates to `operations -- provision-first-hrd --confirm-empty-installation`. Run reviewed migrations first; neither server needs to be running.
+
+For scripted deployment, the same command optionally accepts a JSON object on stdin (up to 16 KiB) with exactly `fullName`, `email`, `initialPassword`, `divisionCode`, `divisionName`, `positionCode`, `positionName`:
+
+```sh
+NODE_ENV=production npm run seed:hr < /private/operator/provision.json
+```
+
+Keep scripted input in a mode-0600 file inside a private directory and remove it according to host policy after confirming login. Keep credentials out of command arguments, shell history and logs, and have the HRD change the initial password. No password is generated or printed by the CLI. A failed/lost CLI output can be checked by an operator in SQL; do not rerun to reset an existing account. There is no public bootstrap/reset endpoint.
+
+Only the separate `NODE_ENV=development npm run operations -- seed-development --confirm-fictional-data` command substitutes fictional account/organization identities (`fictional-hrd@example.test`, DEMO division). It accepts the same interactive or JSON input, retains the supplied test password, requires an empty installation and refuses test/production environments. It adds no schedule, holidays, attendance or time-off rows. Neither application startup invokes it.
+
+For bounded receipt maintenance, use one explicit operator invocation:
+
+```sh
+npm run operations -- cleanup-receipts 100
+```
+
+Each invocation deletes at most the requested 1–1000 expired COMPLETED receipts, ordered by expiry/ID, skipping locked rows. It prints only the deleted count. Retention is at least 24 hours after completion. Cleanup never deletes IN_PROGRESS records, evidence bytes, attendance or history. Reusing a key after receipt expiry can execute again; resolve uncertain outcomes before receipt expiry and postpone cleanup while investigating them. No scheduler or durable recovery worker is installed.
+
+### Native process deployment
+
+Build once with the pinned runtime. Stop both writers and run **one** reviewed `migration:show`/`migration:run` CLI before starting either process. Check that no pending migration remains; startup deliberately performs no schema synchronization or migration. Keep a coordinated backup before DDL: MySQL DDL is not generally rolled back with application transactions, and `migration:revert` is restricted to an empty baseline.
+
+Supervise `node dist/main.js` and `node dist/attendance-main.js` as separate services using the host's launchd/systemd equivalent. Set an absolute working directory to `api-server/`, the pinned absolute Node path, the same service UID, a 0077 umask, persistent storage, restrictive environment-file permissions, bounded log rotation and restart backoff. Supply environment via the supervisor or the repository's private `.env`; npm start aliases are conveniences. Do not put secrets in process arguments or supervisor stdout. Run one instance of each initially; establish capacity before increasing replicas. No Docker, broker or cross-host filesystem is part of this deployment.
+
+Gateway HTTP should bind loopback behind an HTTPS reverse proxy. Preserve the original `/api/v1` prefix and Authorization/Origin/Sec-Fetch-Site headers, and forward request bodies without automatic command retries. Configure exact public web origins independently in CORS_ORIGINS and CSRF_TRUSTED_ORIGINS. Trust proxy remains false: forwarded IP/host/protocol headers are not trusted, so login limits see the proxy's socket address. Keep the proxy upstream private; use proxy connection/body limits and timeouts that allow upload completion plus the RPC deadline. Never expose STORAGE_ROOT as a static directory or log auth/body/query content. Correlate using validated response X-Request-Id; the same UUID travels in the RPC envelope and safe Problems. The app emits safe lifecycle messages, sanitized Problem code/request-ID records and cleanup warnings; optional host instrumentation must retain that restriction.
+
+Both processes need identical DB identity, STORAGE_ROOT and JWT algorithm/secret/issuer/audience/3600-second TTL. Keep the independently generated ATTENDANCE_RPC_CREDENTIAL identical across both services and different from JWT_SECRET. Use the same loopback host/port and finite deadline settings listed above. Restrict host accounts: loopback is not encryption. Separate machines, separate databases, different service UIDs or multiple roots require a new deployment design.
+
+Pre-create a persistent owner-only directory owned by the common service UID. Both applications check that root is a real directory (no root symlink), owned by that UID, with no group/other permissions. Ancestors must not be group/world writable unless sticky. Both check read/write/traversal and exclusive mode-0600 probe creation, write, fsync and removal. Existing permissions are never silently broadened/repaired. Protect ancestors from renames and retain the same mount/root identity while processes are running. Run probes under each actual service identity; successful gateway startup alone does not establish attendance's filesystem visibility. Monitor disk capacity/inodes and mount identity externally; the probe cannot guarantee future writes or detect a writable replacement mount after a full restart.
+
+Readiness is independent per process: wait for its safe ready line, then probe gateway-owned authenticated `/api/v1/me` separately from attendance-backed `/api/v1/me/home` (with a controlled short-lived test credential). A TCP connect alone verifies a listener, not authorization/SQL/handlers. There is no new public health operation. Attendance can be down while login, organization, accounts, profiles and profile images continue working. Calendar/attendance reads and evidence authorization return scoped 503 errors. Gateway never falls back to writing attendance tables.
+
+Graceful stop: stop proxy admission, allow in-flight requests to finish, SIGTERM gateway and attendance, and wait for both exits before maintenance. Use a supervisor grace period longer than the longest RPC deadline plus TCP drain (5 s) and a margin for SQL/file completion. Gateway clients close on completion/deadline and shutdown; attendance closes its listener/sockets; TypeORM releases each pool. If forced termination is necessary, wait for database sessions/transactions/locks to drain before recovery. A deadline or terminated connection is not evidence of rollback. Restart either process independently; new requests open new TCP clients and can reconnect after attendance returns.
+
+The shared database has logical ownership: gateway writes accounts/organization/profile metadata and its receipts; attendance writes schedule/holiday/attendance/evidence association and its receipts. The operations CLI coordinates only provisioning or bounded receipt cleanup. No gateway transaction spans an RPC. Each pool defaults to 10 connections (maximum 100), so budget both processes plus CLI/migration/admin connections. Gateway upload admission defaults to four concurrent uploads, maximum 32, each at most 5 MiB; budget buffers and image decoding overhead. RPC requests/responses are bounded at 256 KiB/2 MiB, with receive/buffer/drain timeouts; these byte bounds do not limit simultaneous RPC handlers. Enforce host/proxy concurrency and connection limits and measure load before deployment. No distributed admission or automatic retry loop is provided.
+
+Synchronize the single host's clock with a monitored time service and alert on clock jumps. JWT validity, receipt retention, upload receipt instants and attendance calculations use server time; configured IANA company zones determine work dates. Don't change the clock to repair attendance. Disk errors fail writes before SQL commit where possible; known committed metadata with unreadable bytes yields a safe 503 and requires restoring the bytes. MySQL loss makes SQL-dependent work unavailable; restore the database before restarting writers. Do not convert availability errors into absent attendance or delete evidence to resolve them.
+
+### Coordinated SQL and file backup/restore
+
+1. Stop external admission and **both** writers, including operations/cleanup/migrations. Wait for process exit and inspect SQL sessions to establish there is no in-flight command/transaction or open writer to private disk. Resolve or record all uncertain outcomes with their original key, actor, operation and canonical input. Do not clean receipts during investigation.
+2. Back up the full application database, migration table and triggers with the native MySQL 8.4 `mysqldump --single-transaction --routines --triggers --no-tablespaces --set-gtid-purged=OFF` into an access-controlled SQL file. Use an operator's protected MySQL option file/login path or secret-injected environment; no password argument. Copy the **entire** private root, including unreferenced staged candidates, into the same private backup set, preserving permissions. Keep writers stopped across both copies; a standalone online SQL dump plus a later disk copy is not a coordinated snapshot.
+3. Record backup time, schema/runtime build, database identity and file checksums/permissions privately. Protect and encrypt the backup at rest using host tooling: SQL includes initial credentials, hashes and retained receipt bodies, and disk includes personal images. Restart only after both copies succeed. Define backup frequency and recovery objectives with the deployment owner.
+4. Rehearse in an isolated same-host environment using a disposable `_test` database and a separate mode-0700 root. Restore **both** halves from one backup set, including triggers/migration state. Never overlay one snapshot's SQL with another snapshot's files. Configure isolated ports/secrets/UID visibility before starting both processes. Keep production admission closed during a real restore.
+5. Verify login and changed-password state, profile bytes, original check-in photo bytes, actual attendance/snapshots, dated history and same-key/same-payload replay for an unexpired receipt. Compare hashes/counts against the backup and confirm a replay creates no extra record/file association. Stop/restart each process independently and repeat content checks. Reopen admission only after these checks; retained receipts expire by wall-clock time even while backed up.
+
+No attendance/evidence deletion or archival policy is introduced. Schedule events are append-only; recorded attendance snapshots survive calendar changes. Receipt expiry does not authorize evidence deletion. Disk/database/history growth requires monitoring and an explicit future retention decision; do not truncate production history. Deleting initial test rows in a disposable rehearsal is not a production maintenance procedure.
+
+For uncertain staged files, first quiesce both writers and establish SQL rollback/commit and reference state with operator access. Preserve the original key/input. Use original-key replay or the actor-scoped internal `attendance.v1.command-outcome` contract to identify a committed result while its receipt is retained; it is not a public HTTP endpoint. UNKNOWN/missing rows, expired receipts, a timeout or file age cannot establish non-use. Inspect file_objects, employees.photo_file_id and attendances.photo_file_id associations under the stopped-writer boundary, confirm the exact generated object key/digest, and check retained receipts/backups before deciding an individual candidate is proven unused. Keep every unresolved candidate. Only an operator with positive evidence of non-use may remove that exact file; there is no bulk orphan-age deletion command. Restore referenced missing/corrupt content from a matching backup. No upload registry, automatic recovery, audit/revocation or time-off policy is added.
+
+### Operations rehearsal
+
+Build first, then run `npm run test:integration -- --watchman=false --runTestsByPath test/operations.integration-spec.ts` with the isolated test environment described above. The suite refuses any nonempty application table, backs up the empty baseline, and restores it on teardown; never point it at production. Provide MYSQL_BIN/MYSQLDUMP_BIN pointing to native **MySQL 8.4** clients if they are not on PATH. The dedicated test account must be able to dump/restore its schema and create/drop a test trigger. Standard integration tests remain separate from migration/startup behavior.
+
+This rehearsal exercises production `dist` entry points/CLI, concurrent provisioning and rollback, explicit development seeding, attendance outage/restart, real image serving, coordinated SQL+disk restore and replay, bounded cleanup, occupied TCP port, unavailable DB on startup, invalid settings/disk and safe logs. It is not a power-loss/fsync or physical disk-full test; real production identity, supervision, proxy behavior and live DB outage recovery still need deployment rehearsal. Task 020 stays pending until its required native MySQL/TCP checks are actually executed successfully; the task note records current evidence.

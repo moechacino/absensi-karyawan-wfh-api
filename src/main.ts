@@ -12,12 +12,16 @@ import {
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     abortOnError: false,
+    logger: false,
   });
   try {
     const config = app.get<RuntimeConfig>(RUNTIME_CONFIG);
     configureHttp(app, config);
     app.enableShutdownHooks();
     await app.listen(config.app.port, config.app.host);
+    // Enable existing sanitized Problems/cleanup warnings after startup succeeds.
+    app.useLogger(['error', 'warn']);
+    console.log('Gateway ready.');
   } catch (error) {
     await app.close();
     throw error;
