@@ -1,11 +1,11 @@
 # WFH Attendance System
 
-LIVE APP DEMO: https://wfh-attendance.forgetmenot.id
-HR email and password: demo.hr01@example.test / Demo-Password-12345
+- LIVE APP DEMO: https://wfh-attendance.forgetmenot.id
+- HR email and password: demo.hr01@example.test / Demo-Password-12345
 
-LIVE API DEMO: https://wfh-attendance-api.forgetmenot.id/
+- LIVE API DEMO: https://wfh-attendance-api.forgetmenot.id/
 
-API DOCS: https://documenter.getpostman.com/view/26325754/2sBYHYvdhX
+- API DOCS: https://documenter.getpostman.com/view/26325754/2sBYHYvdhX
 
 ## Overview
 
