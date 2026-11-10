@@ -21,6 +21,7 @@ const viewOptions: FindManyOptions<ScheduleVersionEntity> = {
     id: true,
     createdAt: true,
     workingDays: true,
+    opensMinutesBeforeStart: true,
     startTime: true,
     endTime: true,
     endDayOffset: true,

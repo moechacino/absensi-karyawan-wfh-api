@@ -21,6 +21,13 @@ describe('typed RPC fault mapping', () => {
     },
   );
 
+  it('transports missed check-out as a completed 409 business failure', () => {
+    expect(rpcProblem(makeRpcFault('MISSED_CHECK_OUT'), true)).toMatchObject({
+      status: 409,
+      code: 'MISSED_CHECK_OUT',
+    });
+  });
+
   it('maps existing helper failures and strips arbitrary exception messages and details', () => {
     const error = new ProblemException(409, 'VERSION_CONFLICT', secret, {
       detail: secret,

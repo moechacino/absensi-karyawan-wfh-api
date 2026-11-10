@@ -5,6 +5,7 @@ import type { RuntimeConfig } from '../runtime/runtime.config';
 import { RuntimeDependencyError } from '../runtime/runtime.errors';
 import { DATABASE_ENTITIES } from './entities';
 import { OrganizationCodeLength1794127860128 } from './migrations/1794127860128-organization-code-length';
+import { AttendanceCheckInPolicy1794268800000 } from './migrations/1794268800000-attendance-check-in-policy';
 import { InitialSchema1794096000001 } from './migrations/1794096000001-initial-schema';
 
 export function dataSourceOptions(config: RuntimeConfig): DataSourceOptions {
@@ -27,6 +28,7 @@ export function dataSourceOptions(config: RuntimeConfig): DataSourceOptions {
     migrations: [
       InitialSchema1794096000001,
       OrganizationCodeLength1794127860128,
+      AttendanceCheckInPolicy1794268800000,
     ],
     migrationsTableName: 'schema_migrations',
     migrationsTransactionMode: 'none',

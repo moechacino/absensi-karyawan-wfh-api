@@ -17,6 +17,7 @@ export class CalendarRepository {
       select: {
         id: true,
         workingDays: true,
+        opensMinutesBeforeStart: true,
         startTime: true,
         endTime: true,
         endDayOffset: true,
@@ -30,6 +31,7 @@ export class CalendarRepository {
 
     return versions.map((version) => ({
       id: version.id,
+      opensMinutesBeforeStart: version.opensMinutesBeforeStart ?? 15,
       workingDays: version.workingDays as number[],
       startTime: version.startTime,
       endTime: version.endTime,

@@ -10,6 +10,7 @@ import type { CalendarInstant } from '../work-calendar/calendar-time';
 export function savedSchedule(row: ScheduleVersionEntity): SavedSchedule {
   return {
     id: row.id,
+    opensMinutesBeforeStart: row.opensMinutesBeforeStart ?? 15,
     workingDays: row.workingDays as number[],
     startTime: row.startTime,
     endTime: row.endTime,
@@ -28,6 +29,7 @@ export function scheduleVersion(
 ): ScheduleVersion {
   return {
     id: row.id,
+    opensMinutesBeforeStart: row.opensMinutesBeforeStart ?? 15,
     workingDays: [...row.workingDays] as number[],
     startTime: row.startTime,
     endTime: row.endTime,
@@ -63,6 +65,9 @@ export function scheduleView(
     upcoming: upcoming
       ? scheduleVersion(upcoming, current?.id, upcoming.id)
       : null,
-    checkInPolicy: { opensMinutesBeforeStart: 15, lateAfterMinutes: 0 },
+    checkInPolicy: {
+      opensMinutesBeforeStart: current?.opensMinutesBeforeStart ?? 15,
+      lateAfterMinutes: 0,
+    },
   };
 }

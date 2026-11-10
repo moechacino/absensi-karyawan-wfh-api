@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { DataSource, In } from 'typeorm';
+import { DataSource, In, IsNull, MoreThanOrEqual } from 'typeorm';
 import type { EntityManager } from 'typeorm';
 import {
   AttendanceEntity,
@@ -46,13 +46,9 @@ export class AttendanceRepository {
     });
   }
 
-  holidays(dates: string[], manager: EntityManager): Promise<HolidayEntity[]> {
-    if (!dates.length) {
-      return Promise.resolve([]);
-    }
-
+  holidays(from: string, manager: EntityManager): Promise<HolidayEntity[]> {
     return manager.find(HolidayEntity, {
-      where: dates.map((date) => ({ year: Number(date.slice(0, 4)), date })),
+      where: { date: MoreThanOrEqual(from) },
       select: { date: true },
     });
   }
@@ -68,6 +64,25 @@ export class AttendanceRepository {
       relationLoadStrategy: 'join',
       lock: { mode: 'pessimistic_write' },
     });
+  }
+
+  async markMissed(
+    employeeId: string,
+    ids: string[],
+    manager: EntityManager,
+  ): Promise<void> {
+    if (!ids.length) return;
+    await manager
+      .createQueryBuilder()
+      .update(AttendanceEntity)
+      .set({ missedCheckOut: true, version: () => '`version` + 1' })
+      .where({
+        employeeId,
+        checkOutAt: IsNull(),
+        missedCheckOut: false,
+        id: In(ids),
+      })
+      .execute();
   }
 
   async insert(row: AttendanceEntity, manager: EntityManager): Promise<void> {

@@ -46,6 +46,14 @@ export class ScheduleVersionEntity {
   })
   createdAt: Date;
 
+  @Column({
+    name: 'opens_minutes_before_start',
+    type: 'smallint',
+    unsigned: true,
+    default: 15,
+  })
+  opensMinutesBeforeStart: number;
+
   @Column({ name: 'working_days', type: 'json' })
   workingDays: unknown[];
 

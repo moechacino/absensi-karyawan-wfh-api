@@ -22,10 +22,25 @@ export type AttendanceCandidate =
   | { workDate: string; schedule: ScheduleSnapshot; working: true }
   | { workDate: string; schedule: null; working: false };
 
+export function isOpenShift(
+  record: {
+    checkOutAt: Date | null;
+    missedCheckOut?: boolean;
+  },
+  at: Date,
+  deadline: string | null = null,
+): boolean {
+  return (
+    !record.checkOutAt &&
+    !record.missedCheckOut &&
+    (!deadline || at.getTime() < Date.parse(deadline))
+  );
+}
+
 export function checkInWindow(schedule: ScheduleSnapshot): CheckInWindow {
   return {
     opensAt: instant(schedule.plannedStartAt)
-      .subtract({ minutes: 15 })
+      .subtract({ minutes: schedule.opensMinutesBeforeStart ?? 15 })
       .toString({ fractionalSecondDigits: 3 }),
     deadlineAt: schedule.plannedStartAt,
     closesAt: schedule.plannedEndAt,
@@ -49,7 +64,7 @@ export function candidateDates(
       .filter(
         (row) =>
           instant(row.effectiveAt).epochMilliseconds <=
-            at.getTime() + 15 * 60000 &&
+            at.getTime() + (row.opensMinutesBeforeStart ?? 15) * 60000 &&
           (!row.supersededAt ||
             instant(row.supersededAt).epochMilliseconds >=
               at.getTime() - 86400000),
@@ -166,7 +181,9 @@ export function dayProjection(
       blockReason:
         attendance.state === 'WORKING'
           ? 'ALREADY_CHECKED_IN'
-          : 'ALREADY_CHECKED_OUT',
+          : attendance.state === 'MISSED_CHECK_OUT'
+            ? 'MISSED_CHECK_OUT'
+            : 'ALREADY_CHECKED_OUT',
     };
   }
 
@@ -234,9 +251,16 @@ export function punctuality(
 }
 
 export function checkoutChanges(
-  record: { version: number; checkOutAt: Date | null; checkInAt: Date },
+  record: {
+    version: number;
+    checkOutAt: Date | null;
+    checkInAt: Date;
+    plannedEndAt?: Date;
+    missedCheckOut?: boolean;
+  },
   expectedVersion: number,
   at: Date,
+  deadline: string | null = null,
 ): { checkOutAt: Date; durationSeconds: number; version: number } {
   if (record.version !== expectedVersion) {
     throw new ProblemException(409, 'VERSION_CONFLICT', 'Version conflict', {
@@ -249,6 +273,17 @@ export function checkoutChanges(
       409,
       'ALREADY_CHECKED_OUT',
       'Already checked out',
+    );
+  }
+
+  if (
+    record.missedCheckOut ||
+    (deadline && at.getTime() >= Date.parse(deadline))
+  ) {
+    throw new ProblemException(
+      409,
+      'MISSED_CHECK_OUT',
+      'The next shift check-in window has opened',
     );
   }
 

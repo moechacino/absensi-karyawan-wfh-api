@@ -62,6 +62,74 @@ describe('attendance eligibility and precision', () => {
     },
   );
 
+  it.each([0, 5, 15, 30, 60, 1440])(
+    'honors an HR allowance of %i minutes at the exact boundary',
+    (minutes) => {
+      const versions = [{ ...version, opensMinutesBeforeStart: minutes }];
+      const opens = new Date(
+        Date.parse('2026-11-09T01:00:00.000Z') - minutes * 60000,
+      );
+      const choices = candidates(versions, opens);
+      const selected = choices.find(
+        (choice) => choice.workDate === '2026-11-09',
+      )!;
+      expect(
+        dayProjection('2026-11-09', selected, false, opens, null).canCheckIn,
+      ).toBe(true);
+      expect(
+        dayProjection(
+          '2026-11-09',
+          selected,
+          false,
+          new Date(opens.getTime() - 1),
+          null,
+        ).blockReason,
+      ).toBe('CHECK_IN_TOO_EARLY');
+    },
+  );
+
+  it('keeps a 20:00–04:00 shift on its starting date and permits checkout at its planned end', () => {
+    const versions = [
+      {
+        ...version,
+        startTime: '20:00',
+        endTime: '04:00',
+        endDayOffset: 1 as const,
+        opensMinutesBeforeStart: 15,
+      },
+    ];
+    for (const timestamp of [
+      '2026-11-09T12:45:00.000Z',
+      '2026-11-09T17:00:00.000Z',
+      '2026-11-09T20:59:59.999Z',
+    ]) {
+      const now = new Date(timestamp);
+      const choice = selectDay(
+        candidates(versions, now, ['2026-11-10']),
+        '2026-11-10',
+        now,
+      )!;
+      expect(choice.workDate).toBe('2026-11-09');
+      expect(
+        dayProjection(choice.workDate, choice, false, now, null).canCheckIn,
+      ).toBe(true);
+    }
+    expect(day('21:00:00.000', versions[0]).canCheckIn).toBe(false);
+    const record = {
+      version: 1,
+      checkOutAt: null,
+      checkInAt: new Date('2026-11-09T13:00:00Z'),
+      plannedEndAt: new Date('2026-11-09T21:00:00Z'),
+    };
+    expect(
+      checkoutChanges(record, 1, new Date('2026-11-09T20:59:59.999Z'))
+        .checkOutAt,
+    ).toEqual(new Date('2026-11-09T20:59:59.999Z'));
+    expect(checkoutChanges(record, 1, record.plannedEndAt).checkOutAt).toEqual(
+      record.plannedEndAt,
+    );
+  });
+
   it.each([
     ['00:45:00.000', 'ON_TIME', 0],
     ['01:00:00.000', 'ON_TIME', 0],

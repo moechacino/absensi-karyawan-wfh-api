@@ -167,6 +167,7 @@ describe('one saved global schedule timeline', () => {
 
   it('returns recorded snapshots before touching current or missing timeline coverage', () => {
     const snapshot = {
+      opensMinutesBeforeStart: 15,
       scheduleVersionId: current().id,
       workDate: '2026-12-31',
       timeZone: 'Asia/Jakarta',

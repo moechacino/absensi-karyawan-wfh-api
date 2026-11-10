@@ -1,6 +1,7 @@
 import type { ScheduleSnapshot } from '../attendance-rpc/rpc.responses';
 
 export interface ScheduleDefinition {
+  readonly opensMinutesBeforeStart?: number;
   readonly workingDays: readonly number[];
   readonly startTime: string;
   readonly endTime: string;

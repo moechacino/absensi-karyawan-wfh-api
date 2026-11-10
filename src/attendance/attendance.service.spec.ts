@@ -67,6 +67,7 @@ function setup() {
     records: jest.fn().mockResolvedValue([]),
     holidays: jest.fn().mockResolvedValue([]),
     insert: jest.fn().mockResolvedValue(undefined),
+    markMissed: jest.fn().mockResolvedValue(undefined),
     close: jest.fn().mockResolvedValue(undefined),
     get: jest.fn(),
   };
@@ -101,6 +102,110 @@ describe('AttendanceService', () => {
     expect(files.attach).not.toHaveBeenCalled();
   });
 
+  it('allows a new shift after a missed check-out without inventing an end timestamp', async () => {
+    const { service, repository } = setup();
+    const expired = record();
+    repository.records.mockResolvedValue([expired]);
+    expect((await service.home(employeeId)).day).toMatchObject({
+      canCheckIn: true,
+      canCheckOut: false,
+      workDate: '2026-11-09',
+    });
+    const result = await service.checkIn(employeeId, image, at, manager);
+    expect(result.workDate).toBe('2026-11-09');
+    expect(repository.markMissed).toHaveBeenCalledWith(
+      employeeId,
+      [expired.id],
+      manager,
+    );
+    expect(repository.markMissed.mock.invocationCallOrder[0]).toBeLessThan(
+      repository.insert.mock.invocationCallOrder[0],
+    );
+    expect(expired.checkOutAt).toBeNull();
+    expect(expired.durationSeconds).toBeNull();
+  });
+
+  it('rejects old checkout at the next opening while allowing the new shift', async () => {
+    const { service, repository, clock } = setup();
+    const row = record();
+    repository.records.mockResolvedValue([row]);
+    repository.get.mockResolvedValue(row);
+    clock.now.mockReturnValue(at);
+    expect((await service.home(employeeId)).day).toMatchObject({
+      canCheckIn: true,
+      canCheckOut: false,
+      workDate: '2026-11-09',
+    });
+    await expect(
+      service.checkOut(employeeId, row.id, 1, at, manager),
+    ).rejects.toMatchObject({ code: 'MISSED_CHECK_OUT' });
+    expect(repository.close).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['2026-11-08T22:00:00.000Z', 'EARLY'],
+    ['2026-11-08T23:00:00.000Z', 'ON_TIME'],
+    ['2026-11-09T00:00:00.000Z', 'LATE'],
+    ['2026-11-09T00:44:59.999Z', 'LATE'],
+  ])(
+    'allows checkout at %s and classifies it as %s against the original snapshot',
+    async (time, state) => {
+      const { service, repository } = setup();
+      const row = record();
+      repository.get.mockResolvedValue(row);
+      expect(
+        await service.checkOut(employeeId, row.id, 1, new Date(time), manager),
+      ).toMatchObject({
+        state: 'COMPLETED',
+        workDate: row.workDate,
+        checkOutPunctuality: state,
+        checkOutAt: time,
+      });
+    },
+  );
+
+  it('keeps an overdue holiday/weekend shift open and refuses a new check-in until its next window', async () => {
+    const { service, repository, clock } = setup();
+    const row = record();
+    repository.records.mockResolvedValue([row]);
+    repository.holidays.mockResolvedValue([{ date: '2026-11-09' }]);
+    clock.now.mockReturnValue(at);
+    expect((await service.home(employeeId)).day).toMatchObject({
+      status: 'WORKING',
+      canCheckOut: true,
+      canCheckIn: false,
+      attendance: {
+        id: row.id,
+        checkOutDeadlineAt: '2026-11-10T00:45:00.000Z',
+      },
+    });
+    await expect(
+      service.checkIn(employeeId, image, at, manager),
+    ).rejects.toMatchObject({ code: 'ALREADY_CHECKED_IN' });
+  });
+
+  it('applies the saved early allowance to home and check-in', async () => {
+    const { service, schedules, clock } = setup();
+    schedules.versions.mockResolvedValue([
+      Object.assign(new ScheduleVersionEntity(), schedule, {
+        opensMinutesBeforeStart: 30,
+      }),
+    ]);
+    const early = new Date('2026-11-09T00:30:00.000Z');
+    clock.now.mockReturnValue(early);
+    expect(await service.home(employeeId)).toMatchObject({
+      day: { canCheckIn: true },
+      workSchedule: { checkInPolicy: { opensMinutesBeforeStart: 30 } },
+      checkInWindow: { opensAt: early.toISOString() },
+    });
+    expect(
+      await service.checkIn(employeeId, image, early, manager),
+    ).toMatchObject({
+      punctuality: 'ON_TIME',
+      schedule: { opensMinutesBeforeStart: 30 },
+    });
+  });
+
   it('returns unconfigured home with UTC date while no schedule or recorded context exists', async () => {
     const { service, schedules } = setup();
     schedules.versions.mockResolvedValue([]);
@@ -114,7 +219,9 @@ describe('AttendanceService', () => {
 
   it('prioritizes an old open snapshot even after a timezone/holiday change', async () => {
     const { service, repository } = setup();
-    const open = record();
+    const open = Object.assign(record(), {
+      plannedEndAt: new Date('2026-11-09T02:00:00.000Z'),
+    });
     repository.records.mockResolvedValue([open]);
     repository.holidays.mockResolvedValue([{ date: '2026-11-09' }]);
     const home = await service.home(employeeId);
@@ -125,7 +232,9 @@ describe('AttendanceService', () => {
       canCheckIn: false,
       schedule: { plannedEndAt: open.plannedEndAt.toISOString() },
     });
-    expect(home.day.attendance).toEqual(attendanceView(open));
+    expect(home.day.attendance).toEqual(
+      attendanceView(open, open.photo, at, '2026-11-10T00:45:00.000Z'),
+    );
   });
 
   it('prioritizes an open snapshot even when today has an invalid local shift time', async () => {
@@ -143,7 +252,7 @@ describe('AttendanceService', () => {
     const open = Object.assign(record(), {
       workDate: '2026-03-07',
       plannedStartAt: new Date('2026-03-07T15:00:00.000Z'),
-      plannedEndAt: new Date('2026-03-07T23:00:00.000Z'),
+      plannedEndAt: new Date('2026-03-08T08:00:00.000Z'),
       checkInAt: new Date('2026-03-07T15:00:00.000Z'),
     });
     repository.records.mockResolvedValue([open]);
@@ -181,7 +290,9 @@ describe('AttendanceService', () => {
       let receivedAt = at;
 
       if (condition === 'open') {
-        repository.records.mockResolvedValue([record()]);
+        repository.records.mockResolvedValue([
+          Object.assign(record(), { workDate: '2026-11-09' }),
+        ]);
       }
 
       if (condition === 'duplicate') {
@@ -214,7 +325,7 @@ describe('AttendanceService', () => {
     );
   });
 
-  it('closes the original snapshot and increments its version without any calendar read', async () => {
+  it('closes the original snapshot and increments its version while revalidating the next-shift boundary', async () => {
     const { service, repository, schedules } = setup();
     const row = record();
     const originalSnapshot = attendanceView(row).schedule;
@@ -228,7 +339,7 @@ describe('AttendanceService', () => {
       checkOutAt: end.toISOString(),
       version: 2,
     });
-    expect(schedules.versions).not.toHaveBeenCalled();
+    expect(schedules.versions).toHaveBeenCalledWith(manager);
     expect(repository.close).toHaveBeenCalledWith(
       row.id,
       { checkOutAt: end, durationSeconds: 1, version: 2 },

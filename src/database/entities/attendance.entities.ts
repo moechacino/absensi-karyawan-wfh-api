@@ -77,6 +77,14 @@ export class AttendanceEntity {
   @Column({ name: 'planned_end_at', type: 'datetime', precision: 3 })
   plannedEndAt: Date;
 
+  @Column({
+    name: 'opens_minutes_before_start',
+    type: 'smallint',
+    unsigned: true,
+    default: 15,
+  })
+  opensMinutesBeforeStart: number;
+
   @Column({ name: 'check_in_at', type: 'datetime', precision: 3 })
   checkInAt: Date;
 
@@ -87,6 +95,9 @@ export class AttendanceEntity {
     nullable: true,
   })
   checkOutAt: Date | null;
+
+  @Column({ name: 'missed_check_out', type: 'boolean', default: false })
+  missedCheckOut: boolean;
 
   @Column({ name: 'punctuality', type: 'enum', enum: ['ON_TIME', 'LATE'] })
   punctuality: 'ON_TIME' | 'LATE';
@@ -110,7 +121,7 @@ export class AttendanceEntity {
     name: 'open_employee_id',
     type: 'char',
     asExpression:
-      'CASE WHEN `check_out_at` IS NULL THEN `employee_id` ELSE NULL END',
+      'CASE WHEN `check_out_at` IS NULL AND `missed_check_out` = 0 THEN `employee_id` ELSE NULL END',
     generatedType: 'STORED',
     insert: false,
     update: false,

@@ -49,6 +49,11 @@ export class TimeZonesInput {
 export class ScheduleInput {
   @IsInt()
   @Min(0)
+  @Max(1440)
+  opensMinutesBeforeStart: number = 15;
+
+  @IsInt()
+  @Min(0)
   @Max(Number.MAX_SAFE_INTEGER)
   expectedVersion: number;
 
@@ -167,6 +172,7 @@ export class MonitoringInput extends PageInput {
     'NOT_CHECKED_IN',
     'WORKING',
     'COMPLETED',
+    'MISSED_CHECK_OUT',
     'HOLIDAY',
     'REST_DAY',
     'UNCONFIGURED',

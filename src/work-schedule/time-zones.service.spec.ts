@@ -75,7 +75,11 @@ describe('TimeZonesService and canonical schedule inputs', () => {
     const input = proposalFixture({ workingDays: [5, 1, 3] });
     const result = scheduleCommand(input);
 
-    expect(result).toEqual({ ...input, workingDays: [1, 3, 5] });
+    expect(result).toEqual({
+      ...input,
+      opensMinutesBeforeStart: 15,
+      workingDays: [1, 3, 5],
+    });
     expect(input.workingDays).toEqual([5, 1, 3]);
     expect(result).not.toHaveProperty('idempotencyKey');
   });

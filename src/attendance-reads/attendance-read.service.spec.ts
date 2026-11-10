@@ -58,15 +58,14 @@ function employee(id: string, name = id) {
 function setup() {
   const repository = {
     consistent: jest.fn(async (work) => work(manager)),
-    employee: jest
-      .fn()
-      .mockResolvedValue({
-        id: 'employee',
-        createdAt: new Date('2026-11-09T05:00:00.000Z'),
-      }),
+    employee: jest.fn().mockResolvedValue({
+      id: 'employee',
+      createdAt: new Date('2026-11-09T05:00:00.000Z'),
+    }),
     holidays: jest.fn().mockResolvedValue([]),
     history: jest.fn().mockResolvedValue([]),
     detail: jest.fn().mockResolvedValue(null),
+    pending: jest.fn().mockResolvedValue([]),
     selectedRecords: jest.fn().mockResolvedValue([]),
   };
   const monitoring = {
@@ -121,7 +120,7 @@ describe('AttendanceReadService', () => {
     });
   });
 
-  it('blocks projected check-in when the employee has an open record outside the requested range', async () => {
+  it('allows projected check-in after an expired record outside the requested range', async () => {
     const { service, repository } = setup();
     repository.history.mockResolvedValue([record('2026-11-01')]);
     const result = await service.history('employee', {
@@ -129,9 +128,9 @@ describe('AttendanceReadService', () => {
       to: '2026-11-09',
     });
     expect(result.items[0]).toMatchObject({
-      canCheckIn: false,
+      canCheckIn: true,
       canCheckOut: false,
-      blockReason: 'ALREADY_CHECKED_IN',
+      blockReason: null,
     });
   });
 
@@ -182,7 +181,31 @@ describe('AttendanceReadService', () => {
     await expect(
       service.detail('other-record', 'employee'),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
-    expect(repository.detail).toHaveBeenCalledWith('other-record', 'employee');
+    expect(repository.detail).toHaveBeenCalledWith(
+      'other-record',
+      'employee',
+      manager,
+    );
+  });
+
+  it('projects missed check-out in details and history without a persisted marker', async () => {
+    const { service, repository } = setup();
+    const expired = record('2026-11-08');
+    repository.detail.mockResolvedValue(expired);
+    repository.history.mockResolvedValue([expired]);
+    expect(await service.detail(expired.id)).toMatchObject({
+      state: 'MISSED_CHECK_OUT',
+      checkOutAt: null,
+      durationSeconds: null,
+    });
+    const history = await service.history('employee', {
+      from: '2026-11-08',
+      to: '2026-11-09',
+    });
+    expect(
+      history.items.find((day) => day.workDate === '2026-11-08'),
+    ).toMatchObject({ status: 'MISSED_CHECK_OUT', canCheckOut: false });
+    expect(expired.missedCheckOut).toBeUndefined();
   });
 
   it('returns an actual record independently of today’s schedule without private paths', async () => {
@@ -191,7 +214,7 @@ describe('AttendanceReadService', () => {
     const result = await service.detail('record-employee', 'employee');
     expect(result.photo.contentPath).toBe('/api/v1/files/photo');
     expect(result).not.toHaveProperty('objectKey');
-    expect(calendar.timeline).not.toHaveBeenCalled();
+    expect(calendar.timeline).toHaveBeenCalledWith(manager);
   });
 
   it('preserves SQL page ordering, uses pre-pagination totals and maps actual versus unrecorded rows', async () => {
@@ -216,8 +239,8 @@ describe('AttendanceReadService', () => {
     expect(result.items.map((row) => row.employee.id)).toEqual(['b', 'a']);
     expect(result.items[0].day).toMatchObject({
       status: 'NOT_CHECKED_IN',
-      canCheckIn: false,
-      blockReason: 'ALREADY_CHECKED_IN',
+      canCheckIn: true,
+      blockReason: null,
     });
     expect(result.items[1].day).toMatchObject({
       status: 'WORKING',

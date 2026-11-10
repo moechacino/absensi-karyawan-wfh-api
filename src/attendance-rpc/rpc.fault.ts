@@ -169,6 +169,11 @@ export const rpcFaultDefinitions = {
     status: 409,
     message: 'Already checked in',
   },
+  MISSED_CHECK_OUT: {
+    kind: 'business',
+    status: 409,
+    message: 'The next shift check-in window has opened',
+  },
   ALREADY_CHECKED_OUT: {
     kind: 'business',
     status: 409,

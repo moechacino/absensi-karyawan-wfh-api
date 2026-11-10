@@ -205,6 +205,7 @@ describe('dated attendance read rules', () => {
         notCheckedIn: 0,
         working: 3,
         completed: 2,
+        missedCheckOut: 0,
         late: 3,
         holiday: 0,
         restDay: 4,

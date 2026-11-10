@@ -129,6 +129,19 @@ describe('RPC boundary helpers', () => {
     await expect(validate(schedule, ScheduleInput)).resolves.toMatchObject(
       schedule,
     );
+    await expect(validate(schedule, ScheduleInput)).resolves.toMatchObject({
+      opensMinutesBeforeStart: 15,
+    });
+    for (const opensMinutesBeforeStart of [0, 30, 1440]) {
+      await expect(
+        validate({ ...schedule, opensMinutesBeforeStart }, ScheduleInput),
+      ).resolves.toMatchObject({ opensMinutesBeforeStart });
+    }
+    for (const opensMinutesBeforeStart of [-1, 1441, 1.5, null, '15']) {
+      await expect(
+        validate({ ...schedule, opensMinutesBeforeStart }, ScheduleInput),
+      ).rejects.toThrow(RpcException);
+    }
     await expect(
       validate({ ...schedule, workingDays: [1, 1] }, ScheduleInput),
     ).rejects.toThrow(RpcException);

@@ -71,6 +71,7 @@ describe('HR monitoring filters, totals and read consistency across two processe
       notCheckedIn: 2,
       working: 1,
       completed: 1,
+      missedCheckOut: 0,
       late: 1,
       holiday: 0,
       restDay: 0,
@@ -258,8 +259,8 @@ describe('HR monitoring filters, totals and read consistency across two processe
     expect(one.body.pagination.totalItems).toBe(50);
     expect(all.body.items).toHaveLength(50);
     expect(all.body.summary.notCheckedIn).toBe(50);
-    expect(afterOne.reads - serviceBefore.reads).toBe(6);
-    expect(afterAll.reads - afterOne.reads).toBe(6);
+    expect(afterOne.reads - serviceBefore.reads).toBe(7);
+    expect(afterAll.reads - afterOne.reads).toBe(7);
     expect(afterAll.credentialReads - serviceBefore.credentialReads).toBe(0);
     expect(queryCounts(apps.gateway).reads - gatewayBefore.reads).toBe(0);
     expect(JSON.stringify(all.body)).not.toMatch(

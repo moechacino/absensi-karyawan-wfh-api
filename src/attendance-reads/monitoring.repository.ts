@@ -5,7 +5,7 @@ import { AttendanceEntity, EmployeeEntity } from '../database/entities';
 import type { MonitoringInput } from '../attendance-rpc/rpc.inputs';
 import type { DatedContext, StatusTotal } from './attendance-read.rules';
 
-const dayStatus = `CASE WHEN attendance.id IS NULL THEN :projectedStatus WHEN attendance.checkOutAt IS NULL THEN 'WORKING' ELSE 'COMPLETED' END`;
+const dayStatus = `CASE WHEN attendance.id IS NULL THEN :projectedStatus WHEN attendance.checkOutAt IS NULL AND (attendance.missedCheckOut = 1 OR attendance.id IN (:...expiredIds)) THEN 'MISSED_CHECK_OUT' WHEN attendance.checkOutAt IS NULL THEN 'WORKING' ELSE 'COMPLETED' END`;
 
 @Injectable()
 export class MonitoringRepository {
@@ -13,6 +13,7 @@ export class MonitoringRepository {
     input: MonitoringInput,
     context: DatedContext,
     manager: EntityManager,
+    expiredIds: string[],
   ): SelectQueryBuilder<EmployeeEntity> {
     const query = manager
       .createQueryBuilder(EmployeeEntity, 'employee')
@@ -26,7 +27,13 @@ export class MonitoringRepository {
         '(attendance.id IS NOT NULL OR (employee.status = :active AND employee.createdAt < :cutoff))',
         { active: 'ACTIVE', cutoff: context.creationCutoff },
       )
-      .setParameter('projectedStatus', context.status);
+      .setParameter('projectedStatus', context.status)
+      .setParameter(
+        'expiredIds',
+        expiredIds.length
+          ? expiredIds
+          : ['00000000-0000-0000-0000-000000000000'],
+      );
 
     if (input.divisionId) {
       query.andWhere('employee.divisionId = :divisionId', {
@@ -59,8 +66,9 @@ export class MonitoringRepository {
     input: MonitoringInput,
     context: DatedContext,
     manager: EntityManager,
+    expiredIds: string[],
   ): Promise<{ ids: string[]; totals: StatusTotal[] }> {
-    const query = this.filtered(input, context, manager);
+    const query = this.filtered(input, context, manager, expiredIds);
     const page = input.page ?? 1;
     const pageSize = input.pageSize ?? 20;
     const [ids, totals] = await Promise.all([

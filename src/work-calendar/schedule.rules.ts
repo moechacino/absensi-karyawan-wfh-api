@@ -36,6 +36,20 @@ export function scheduleDefinition(
     );
   }
 
+  const opensMinutesBeforeStart = input.opensMinutesBeforeStart ?? 15;
+
+  if (
+    !Number.isInteger(opensMinutesBeforeStart) ||
+    opensMinutesBeforeStart < 0 ||
+    opensMinutesBeforeStart > 1440
+  ) {
+    throw new ProblemException(
+      400,
+      'VALIDATION_FAILED',
+      'Early check-in allowance must be an integer from 0 to 1440 minutes',
+    );
+  }
+
   const duration =
     input.endDayOffset * 1440 +
     timeMinutes(input.endTime) -
@@ -54,6 +68,7 @@ export function scheduleDefinition(
   }
 
   return Object.freeze({
+    opensMinutesBeforeStart,
     workingDays: Object.freeze([...input.workingDays]),
     startTime: input.startTime,
     endTime: input.endTime,
@@ -122,6 +137,7 @@ export function snapshotForDate(
   }
 
   return Object.freeze({
+    opensMinutesBeforeStart: definition.opensMinutesBeforeStart,
     scheduleVersionId: version.id,
     workDate: day,
     timeZone: definition.timeZone,
@@ -144,6 +160,7 @@ export function recordedSnapshot(
 
   // Preserve the recorded offsets/instants verbatim; do not resolve them under new zone data.
   return Object.freeze({
+    opensMinutesBeforeStart: snapshot.opensMinutesBeforeStart ?? 15,
     scheduleVersionId: snapshot.scheduleVersionId,
     workDate: snapshot.workDate,
     timeZone: snapshot.timeZone,

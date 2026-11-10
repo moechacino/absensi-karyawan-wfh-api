@@ -157,7 +157,7 @@ describe('dated self history and actual-record reads across two processes', () =
     ).toEqual([]);
   });
 
-  it('uses an open record outside the range to block a new check-in without returning an out-of-range row', async () => {
+  it('ignores an expired record outside the range when checking the next shift', async () => {
     const { apps } = reads;
     await apps.checkIn().expect(201);
     await apps.setTime('2026-11-10T01:00:00.000Z');
@@ -169,8 +169,8 @@ describe('dated self history and actual-record reads across two processes', () =
       workDate: '2026-11-10',
       status: 'NOT_CHECKED_IN',
       attendance: null,
-      canCheckIn: false,
-      blockReason: 'ALREADY_CHECKED_IN',
+      canCheckIn: true,
+      blockReason: null,
     });
   });
 
@@ -311,7 +311,7 @@ describe('dated self history and actual-record reads across two processes', () =
     expect(afterHistory.reads - serviceBefore.reads).toBe(4);
     await reads.detail(created.body.id).expect(200);
     const afterDetail = queryCounts(apps.attendance);
-    expect(afterDetail.reads - afterHistory.reads).toBe(1);
+    expect(afterDetail.reads - afterHistory.reads).toBe(3);
     expect(afterDetail.credentialReads - serviceBefore.credentialReads).toBe(0);
     expect(queryCounts(apps.gateway).reads - gatewayBefore.reads).toBe(0);
   });

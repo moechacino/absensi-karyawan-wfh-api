@@ -97,8 +97,9 @@ class PausedMonitoringRepository extends MonitoringRepository {
     input: MonitoringInput,
     context: DatedContext,
     manager: EntityManager,
+    expiredIds: string[],
   ) {
-    const result = await super.selected(input, context, manager);
+    const result = await super.selected(input, context, manager, expiredIds);
 
     if (this.state.holdRead) {
       const gate = new Promise<void>((resolve) => {

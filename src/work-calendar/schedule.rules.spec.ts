@@ -29,6 +29,17 @@ describe('calendar schedule rules', () => {
     );
   });
 
+  it.each([-1, 1441, 1.5, NaN])(
+    'rejects invalid early allowance %s',
+    (minutes) => {
+      expect(() =>
+        scheduleDefinition(
+          proposalFixture({ opensMinutesBeforeStart: minutes }),
+        ),
+      ).toThrow('Early check-in allowance');
+    },
+  );
+
   it('returns a detached, frozen definition without mutating caller weekdays', () => {
     const weekdays = [5, 1];
     const input = scheduleFixture({ workingDays: weekdays });
@@ -109,6 +120,7 @@ describe('calendar schedule rules', () => {
     });
 
     expect(snapshotForDate(version, '2026-12-31')).toEqual({
+      opensMinutesBeforeStart: 15,
       scheduleVersionId: version.id,
       workDate: '2026-12-31',
       timeZone: 'Asia/Jakarta',

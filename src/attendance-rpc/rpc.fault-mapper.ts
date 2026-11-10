@@ -6,7 +6,7 @@ import { isRpcFaultCode, makeRpcFault, rpcFaultDefinitions } from './rpc.fault';
 import type { RpcFault, RpcFaultOptions, RpcFieldError } from './rpc.fault';
 
 const fieldPath =
-  /^(expectedVersion|workingDays|startTime|endTime|endDayOffset|timeZone|effectiveFrom|year|upsert|remove|date|name|category|page|pageSize|q|atDate|from|to|attendanceId|divisionId|status|punctuality)(\.(\d{1,3}|date|name|category))*$/;
+  /^(opensMinutesBeforeStart|expectedVersion|workingDays|startTime|endTime|endDayOffset|timeZone|effectiveFrom|year|upsert|remove|date|name|category|page|pageSize|q|atDate|from|to|attendanceId|divisionId|status|punctuality)(\.(\d{1,3}|date|name|category))*$/;
 
 export function safeFaultOptions(value: unknown): RpcFaultOptions {
   if (!value || typeof value !== 'object') {

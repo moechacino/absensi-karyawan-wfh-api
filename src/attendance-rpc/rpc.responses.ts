@@ -10,10 +10,13 @@ export type Attendance = {
   id: string;
   employeeId: string;
   workDate: string;
-  state: 'WORKING' | 'COMPLETED';
+  state: 'WORKING' | 'COMPLETED' | 'MISSED_CHECK_OUT';
   schedule: ScheduleSnapshot;
   checkInAt: string;
   checkOutAt: string | null;
+  checkOutDeadlineAt: string | null;
+  checkOutPunctuality: 'EARLY' | 'ON_TIME' | 'LATE' | null;
+  earlyCheckOutSeconds: number | null;
   punctuality: 'ON_TIME' | 'LATE';
   lateSeconds: number;
   durationSeconds: number | null;
@@ -27,6 +30,7 @@ export type AttendanceDay = {
     | 'NOT_CHECKED_IN'
     | 'WORKING'
     | 'COMPLETED'
+    | 'MISSED_CHECK_OUT'
     | 'HOLIDAY'
     | 'REST_DAY'
     | 'UNCONFIGURED';
@@ -42,6 +46,7 @@ export type AttendanceDay = {
     | 'CHECK_IN_WINDOW_CLOSED'
     | 'ALREADY_CHECKED_IN'
     | 'ALREADY_CHECKED_OUT'
+    | 'MISSED_CHECK_OUT'
     | null;
 };
 
@@ -61,7 +66,7 @@ export type ChangeImpact = {
 };
 
 export type CheckInPolicy = {
-  opensMinutesBeforeStart: 15;
+  opensMinutesBeforeStart: number;
   lateAfterMinutes: 0;
 };
 
@@ -132,6 +137,7 @@ export type MonitoringPage = {
     notCheckedIn: number;
     working: number;
     completed: number;
+    missedCheckOut: number;
     late: number;
     holiday: number;
     restDay: number;
@@ -157,6 +163,7 @@ export type ProfilePhoto = FileMetadata & {
 };
 
 export type ScheduleChange = {
+  opensMinutesBeforeStart?: number;
   expectedVersion: number;
   workingDays: Array<number>;
   startTime: string;
@@ -184,6 +191,7 @@ export type SchedulePreview = {
 };
 
 export type ScheduleSnapshot = {
+  opensMinutesBeforeStart?: number;
   scheduleVersionId: string;
   workDate: string;
   timeZone: string;
@@ -192,6 +200,7 @@ export type ScheduleSnapshot = {
 };
 
 export type ScheduleVersion = {
+  opensMinutesBeforeStart?: number;
   id: string;
   workingDays: Array<number>;
   startTime: string;

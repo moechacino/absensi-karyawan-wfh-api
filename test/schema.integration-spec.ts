@@ -34,6 +34,7 @@ describe('explicit MySQL schema and persistence invariants', () => {
   it('reverts an empty baseline, connects without schema checks or writes, and reapplies once', async () => {
     await source.undoLastMigration();
     await source.undoLastMigration();
+    await source.undoLastMigration();
     const before = await source.query('SHOW TABLES');
     expect(await source.showMigrations()).toBe(true);
     const connection = await connectDatabase(
@@ -46,6 +47,7 @@ describe('explicit MySQL schema and persistence invariants', () => {
     ).toEqual([
       'InitialSchema1794096000001',
       'OrganizationCodeLength1794127860128',
+      'AttendanceCheckInPolicy1794268800000',
     ]);
     expect(
       (await source.runMigrations()).map((migration) => migration.name),
@@ -112,7 +114,7 @@ describe('explicit MySQL schema and persistence invariants', () => {
       const checks = await source.query(
         "SELECT CONSTRAINT_NAME FROM information_schema.TABLE_CONSTRAINTS WHERE TABLE_SCHEMA = DATABASE() AND CONSTRAINT_TYPE = 'CHECK'",
       );
-      expect(checks).toHaveLength(15);
+      expect(checks).toHaveLength(17);
       const triggers = await source.query(
         'SELECT TRIGGER_NAME FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA = DATABASE()',
       );
@@ -205,6 +207,7 @@ describe('explicit MySQL schema and persistence invariants', () => {
       expect(await source.query('SELECT name FROM schema_migrations')).toEqual([
         { name: 'InitialSchema1794096000001' },
         { name: 'OrganizationCodeLength1794127860128' },
+        { name: 'AttendanceCheckInPolicy1794268800000' },
       ]);
     } finally {
       await source.manager.delete(DivisionEntity, { id });
