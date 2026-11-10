@@ -35,7 +35,7 @@ export function mapProfile(
     hasPasswordChanged: e.hasPasswordChanged,
     permissions: permissions(role),
     passwordPolicy: {
-      minLength: 15,
+      minLength: 8,
       maxLength: 128,
       requiresDifferentPassword: true,
     },

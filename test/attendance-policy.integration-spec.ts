@@ -186,7 +186,12 @@ describe('HR check-in policy and missed check-out over HTTP/TCP/MySQL', () => {
       "CREATE TRIGGER fail_policy_insert BEFORE INSERT ON attendances FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'policy rollback fixture'",
     );
     try {
-      await apps.checkIn().expect(500);
+      await apps
+        .checkIn()
+        .expect(503)
+        .expect(({ body }) =>
+          expect(body.code).toBe('ATTENDANCE_OUTCOME_UNKNOWN'),
+        );
       expect(
         await apps.source.manager.findOneByOrFail(AttendanceEntity, {
           id: first.body.id,

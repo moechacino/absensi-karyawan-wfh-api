@@ -85,6 +85,11 @@ describe('AuthService', () => {
       '127.0.0.1',
     );
     expect(result.employee.hasPasswordChanged).toBe(false);
+    expect(result.employee.passwordPolicy).toEqual({
+      minLength: 8,
+      maxLength: 128,
+      requiresDifferentPassword: true,
+    });
     expect(result.employee.permissions).toEqual(['SELF_SERVICE']);
     expect(result.employee).not.toHaveProperty('initialPassword');
     expect(result.employee).not.toHaveProperty('passwordHash');
@@ -124,31 +129,39 @@ describe('AuthService', () => {
     employee.role = 'HRD' as any;
     employee.status = 'INACTIVE' as any;
     const result = await service.me(actor);
+    expect(result.passwordPolicy.minLength).toBe(8);
     expect(result.role).toBe('HRD');
     expect(result.status).toBe('INACTIVE');
     expect(result.permissions).toEqual(['SELF_SERVICE']);
   });
 
-  it('changes the credential in the supplied transaction after current-password verification', async () => {
-    const { service, repository, employee, manager, passwords } = setup();
-    const password = '😀'.repeat(15);
-    await service.changePassword(actor, {
-      currentPassword: 'old',
-      newPassword: password,
-      confirmPassword: password,
-    });
-    expect(passwords.hash).toHaveBeenCalledWith(password);
-    expect(repository.changePassword).toHaveBeenCalledWith(
-      manager,
-      employee,
-      'argon2-hash',
-    );
-  });
+  it.each(['abcdefgh', '😀'.repeat(8), 'x'.repeat(128)])(
+    'accepts an allowed password %s after current-password verification',
+    async (password) => {
+      const { service, repository, employee, manager, passwords } = setup();
+      await service.changePassword(actor, {
+        currentPassword: 'old',
+        newPassword: password,
+        confirmPassword: password,
+      });
+      expect(passwords.hash).toHaveBeenCalledWith(password);
+      expect(repository.changePassword).toHaveBeenCalledWith(
+        manager,
+        employee,
+        'argon2-hash',
+      );
+    },
+  );
 
   it.each([
     {
-      newPassword: '😀'.repeat(14),
-      confirmPassword: '😀'.repeat(14),
+      newPassword: 'abcdefg',
+      confirmPassword: 'abcdefg',
+      code: 'PASSWORD_POLICY',
+    },
+    {
+      newPassword: '😀'.repeat(7),
+      confirmPassword: '😀'.repeat(7),
       code: 'PASSWORD_POLICY',
     },
     {

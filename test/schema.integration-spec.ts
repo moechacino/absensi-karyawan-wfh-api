@@ -7,6 +7,7 @@ import {
 } from '../src/database/database.options';
 import { loadRuntimeConfig } from '../src/runtime/runtime.config';
 import { InitialSchema1794096000001 } from '../src/database/migrations/1794096000001-initial-schema';
+import { OrganizationCodeLength1794127860128 } from '../src/database/migrations/1794127860128-organization-code-length';
 import {
   DATABASE_ENTITIES,
   DivisionEntity,
@@ -229,9 +230,12 @@ describe('explicit MySQL schema and persistence invariants', () => {
       name: 'Migration fixture',
     });
 
+    const runner = source.createQueryRunner();
+    const migration = new OrganizationCodeLength1794127860128();
+
     try {
-      await source.undoLastMigration();
-      await source.runMigrations();
+      await migration.down(runner);
+      await migration.up(runner);
       expect(
         (await source.manager.findOneByOrFail(DivisionEntity, { id: division }))
           .code,
@@ -245,16 +249,22 @@ describe('explicit MySQL schema and persistence invariants', () => {
         { id: position },
         { code: 'P'.repeat(40) },
       );
-      await expect(source.undoLastMigration()).rejects.toThrow(
+      await expect(migration.down(runner)).rejects.toThrow(
         'Refusing to truncate organization codes',
       );
       expect(
         (await source.manager.findOneByOrFail(PositionEntity, { id: position }))
           .code,
       ).toBe('P'.repeat(40));
+      expect(await source.showMigrations()).toBe(false);
     } finally {
-      await source.manager.delete(PositionEntity, { id: position });
-      await source.manager.delete(DivisionEntity, { id: division });
+      try {
+        await migration.up(runner);
+        await source.manager.delete(PositionEntity, { id: position });
+        await source.manager.delete(DivisionEntity, { id: division });
+      } finally {
+        await runner.release();
+      }
     }
   });
 

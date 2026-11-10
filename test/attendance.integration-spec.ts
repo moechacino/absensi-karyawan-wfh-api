@@ -144,14 +144,15 @@ describe('production attendance HTTP → separate TCP process → MySQL', () => 
     expect(await readdir(apps.root)).toEqual([first.body.photo.id + '.png']);
   });
 
-  it('coordinates checkout of yesterday with a fresh check-in without two open records', async () => {
+  it('rejects expired checkout while a fresh check-in leaves one open record', async () => {
     const first = await apps.checkIn().expect(201);
     await apps.setTime('2026-11-10T01:00:00.001Z');
     const [closed, attempted] = await Promise.all([
       apps.checkOut(first.body.id),
       apps.checkIn(),
     ]);
-    expect(closed.status).toBe(200);
+    expect(closed.status).toBe(409);
+    expect(closed.body.code).toBe('MISSED_CHECK_OUT');
     expect([201, 409]).toContain(attempted.status);
 
     if (attempted.status === 409) {
@@ -165,7 +166,7 @@ describe('production attendance HTTP → separate TCP process → MySQL', () => 
     ).toBe(1);
     expect(await apps.snapshotCounts()).toEqual({
       records: 2,
-      receipts: 3,
+      receipts: 2,
       files: 3,
     });
     expect(await readdir(apps.root)).toHaveLength(2);

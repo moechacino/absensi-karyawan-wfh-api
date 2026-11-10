@@ -94,4 +94,167 @@ The demo seed creates **4 HR accounts, 36 employees, and 6 divisions** in develo
 | HR       | `demo.hr01@example.test`       | `Demo-Password-12345` |
 | Employee | `demo.employee01@example.test` | `Demo-Password-12345` |
 
+Passwords require **8–128 Unicode characters**, including when changing your password.
+
 Setting `SEED_PASSWORD` overrides the default password for newly seeded accounts. Re-running the seeder preserves existing accounts and passwords.
+
+## Database Structure
+
+The diagrams show all 11 application tables and their main columns, using database column names. Routine timestamps and some supporting columns are omitted for readability. `PK` means primary key, `FK` foreign key, and `UK` unique key; nullable columns are noted in comments. HR and employees share the `employees` table, distinguished by `role`.
+
+### Accounts, attendance, files, and retry receipts
+
+```mermaid
+erDiagram
+    divisions ||--o{ positions : contains
+    divisions ||--o{ employees : groups
+    positions ||--o{ employees : assigns
+    employees ||--o{ attendances : records
+    employees ||--o{ file_objects : owns
+    file_objects o|--o{ employees : profile_photo
+    file_objects ||--o{ attendances : check_in_photo
+    employees ||--o{ idempotency_operations : submits
+    schedule_versions ||--o{ attendances : snapshots
+
+    divisions {
+        char(36) id PK
+        varchar(40) code UK
+        varchar(160) name
+        varchar(2000) description "nullable"
+        enum status
+        int version
+    }
+    positions {
+        char(36) id PK
+        char(36) division_id FK
+        varchar(40) code UK
+        varchar(160) name
+        enum status
+        int version
+    }
+    employees {
+        char(36) id PK
+        char(36) division_id FK
+        char(36) position_id FK
+        char(36) photo_file_id FK "nullable"
+        varchar(160) full_name
+        varchar(254) email UK
+        enum role "HRD or EMPLOYEE"
+        enum status
+        varchar(255) password_hash "nullable"
+        boolean has_password_changed
+        int version
+    }
+    attendances {
+        char(36) id PK
+        char(36) employee_id FK
+        char(36) schedule_version_id FK
+        char(36) photo_file_id FK
+        date work_date
+        varchar(100) time_zone
+        datetime planned_start_at
+        datetime planned_end_at
+        smallint opens_minutes_before_start
+        datetime check_in_at
+        datetime check_out_at "nullable"
+        boolean missed_check_out
+        enum punctuality "ON_TIME or LATE at check-in"
+        int late_seconds
+        int duration_seconds "nullable"
+        char(36) open_employee_id UK "generated, nullable"
+        int version
+    }
+    file_objects {
+        char(36) id PK
+        char(36) owner_employee_id FK
+        varchar(512) object_key UK
+        varchar(255) file_name
+        enum mime_type
+        int size_bytes
+        varchar(64) sha256
+        enum purpose
+        enum state
+    }
+    idempotency_operations {
+        char(36) id PK
+        char(36) actor_id FK
+        varchar(200) route_scope
+        char(36) idempotency_key
+        varchar(64) fingerprint
+        enum state
+        smallint http_status "nullable"
+        json result "nullable"
+        char(36) resource_id "nullable, no foreign key"
+        datetime expires_at
+    }
+    schedule_versions {
+        char(36) id PK
+    }
+```
+
+Database constraints enforce one attendance per `(employee_id, work_date)` and one open attendance per employee through the generated `open_employee_id`. A composite foreign key ensures an employee's position belongs to their division. Retry receipts are unique by `(actor_id, route_scope, idempotency_key)`. The idempotency table has one foreign key: `actor_id` references `employees.id`, identifying who submitted the operation. Its `resource_id` is an optional operation-specific reference without a foreign key, so there is no direct relationship to `attendances`. `file_objects` stores metadata; image bytes live in private filesystem storage.
+
+### Versioned schedules and holidays
+
+```mermaid
+erDiagram
+    employees ||--o{ schedule_versions : creates
+    employees ||--o{ schedule_events : performs
+    schedule_versions ||--o{ schedule_events : logs
+    holiday_calendars ||--o{ holidays : contains
+
+    employees {
+        char(36) id PK
+    }
+    calendar_state {
+        tinyint id PK "singleton coordination row"
+        int version
+    }
+    schedule_versions {
+        char(36) id PK
+        char(36) created_by FK
+        json working_days
+        varchar(5) start_time
+        varchar(5) end_time
+        tinyint end_day_offset
+        varchar(100) time_zone
+        smallint opens_minutes_before_start
+        date effective_from
+        datetime effective_at
+        datetime superseded_at "nullable"
+    }
+    schedule_events {
+        char(36) id PK
+        char(36) schedule_version_id FK
+        char(36) actor_id FK
+        enum kind "SAVED or SUPERSEDED"
+        int calendar_version
+        json details
+    }
+    holiday_calendars {
+        smallint year PK
+        int version
+    }
+    holidays {
+        smallint year PK, FK
+        date date PK
+        varchar(160) name
+        enum category
+    }
+```
+
+`calendar_state` coordinates calendar changes through a shared lock and version; it has no foreign key relationship to schedule rows. Holidays use the composite primary key `(year, date)`. Attendance references a schedule version and also copies its shift values, preserving the recorded shift after HR changes the schedule.
+
+## Running integration tests
+
+Use the pinned Node version (`nvm use`) and build before testing, since the operations suite launches the compiled entry points:
+
+```sh
+nvm use
+npm run build
+npm run test:integration
+```
+
+The command loads `.env.test.local`. Set `NODE_ENV=test`, use an empty dedicated database whose name ends in `_test`, and supply the database credentials and JWT/RPC secrets. Do not seed this database. The suite starts its own gateway and attendance processes.
+
+MySQL must default to UTC (`@@session.time_zone = '+00:00'`). Configure `default-time-zone = '+00:00'` under `[mysqld]` in your MySQL configuration and restart MySQL. For the current server, an administrator can run `SET GLOBAL time_zone = '+00:00';`; this applies to new connections until restart.

@@ -75,7 +75,10 @@ describe('dated self history and actual-record reads across two processes', () =
       schedule: null,
       canCheckIn: false,
     });
-    expect(page.body.items[1].attendance).toEqual(closed.body);
+    expect(page.body.items[1].attendance).toEqual({
+      ...closed.body,
+      checkOutDeadlineAt: '2026-11-11T00:45:00.000Z',
+    });
     expect(page.body.items[1].attendance).toMatchObject({
       lateSeconds: 1,
       punctuality: 'LATE',
@@ -105,7 +108,10 @@ describe('dated self history and actual-record reads across two processes', () =
     });
     expect(await apps.snapshotCounts()).toEqual(before);
     const detail = await reads.detail(first.body.id).expect(200);
-    expect(detail.body).toEqual(closed.body);
+    expect(detail.body).toEqual({
+      ...closed.body,
+      checkOutDeadlineAt: '2026-11-11T00:45:00.000Z',
+    });
     reads.capture('Attendance', detail.body);
     const photo = await request(apps.base)
       .get(detail.body.photo.contentPath)
@@ -274,11 +280,15 @@ describe('dated self history and actual-record reads across two processes', () =
     const history = await reads
       .history('from=2026-11-01&to=2026-11-01')
       .expect(200);
-    expect(history.body.items[0].attendance).toEqual(actual.body);
+    const expected = {
+      ...actual.body,
+      checkOutDeadlineAt: '2026-11-02T06:15:00.000Z',
+    };
+    expect(history.body.items[0].attendance).toEqual(expected);
     const filtered = await reads
       .monitor('date=2026-11-01&status=WORKING')
       .expect(200);
-    expect(filtered.body.items[0].day.attendance).toEqual(actual.body);
+    expect(filtered.body.items[0].day.attendance).toEqual(expected);
     await reads
       .monitor('date=2026-11-01')
       .expect(422)

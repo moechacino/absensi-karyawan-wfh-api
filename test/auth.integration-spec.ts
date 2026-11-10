@@ -80,7 +80,7 @@ describe('authentication HTTP with native MySQL', () => {
 
   it('replaces initial plaintext with a hash, accepts the new credential and preserves the old JWT', async () => {
     const grant = (await login().expect(200)).body;
-    const password = '😀'.repeat(15);
+    const password = '😀'.repeat(8);
     await request(app.getHttpServer())
       .post('/api/v1/auth/password')
       .set('Authorization', 'Bearer ' + grant.accessToken)

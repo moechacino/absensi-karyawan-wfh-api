@@ -41,7 +41,7 @@ export interface RuntimeConfig {
     maxConcurrentUploads: number;
   }>;
   readonly policy: Readonly<{
-    passwordMinLength: 15;
+    passwordMinLength: 8;
     passwordMaxLength: 128;
     idempotencyRetentionSeconds: number;
   }>;
@@ -208,7 +208,7 @@ export function parseRuntimeConfig(
       maxConcurrentUploads: integer('MAX_CONCURRENT_UPLOADS', 4, 1, 32),
     }),
     policy: Object.freeze({
-      passwordMinLength: 15,
+      passwordMinLength: 8,
       passwordMaxLength: 128,
       idempotencyRetentionSeconds: integer(
         'IDEMPOTENCY_RETENTION_SECONDS',

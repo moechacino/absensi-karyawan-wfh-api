@@ -44,7 +44,7 @@ describe('employee HTTP with native MySQL', () => {
     }).compile();
     app = module.createNestApplication<NestExpressApplication>();
     configureHttp(app, loadRuntimeConfig());
-    await app.init();
+    await app.listen(0, '127.0.0.1');
     source = app.get(DataSource);
   });
   afterAll(async () => {

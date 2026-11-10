@@ -37,7 +37,7 @@ export interface MeProfile {
   hasPasswordChanged: boolean;
   permissions: Permission[];
   passwordPolicy: {
-    minLength: 15;
+    minLength: 8;
     maxLength: 128;
     requiresDifferentPassword: true;
   };

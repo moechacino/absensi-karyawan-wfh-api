@@ -1,9 +1,8 @@
-import { NestFactory } from '@nestjs/core';
 import type { INestMicroservice } from '@nestjs/common';
 import { AttendanceAppModule } from '../src/attendance-app.module';
 import { AttendanceFileService } from '../src/attendance-files/attendance-file.service';
 import { attendanceTcpOptions } from '../src/attendance-rpc/rpc.transport';
-import { loadRpcConfig } from '../src/attendance-rpc/rpc.config';
+import { RPC_CONFIG, loadRpcConfig } from '../src/attendance-rpc/rpc.config';
 import { ImageService } from '../src/files/image.service';
 import { stageImage } from '../src/files/stage-image';
 import {
@@ -42,6 +41,7 @@ import {
   ScheduleVersionEntity,
 } from '../src/database/entities';
 import { insertFixture, prepareTestDatabase } from './mysql-fixture';
+import { freePort } from './file-handoff.helpers';
 
 // Test-only parent command proves multipart integration without adding an upload API to production.
 @Controller('__file-parent-fixture')
@@ -98,15 +98,29 @@ describe('private files HTTP and parent transactions with native MySQL', () => {
   beforeAll(async () => {
     const prepared = await prepareTestDatabase();
     await prepared.destroy();
-    attendance = await NestFactory.createMicroservice(AttendanceAppModule, {
-      ...attendanceTcpOptions(loadRpcConfig()),
+    const rpc = {
+      ...loadRpcConfig(),
+      host: '127.0.0.1' as const,
+      port: await freePort(),
+    };
+    const attendanceModule = await Test.createTestingModule({
+      imports: [AttendanceAppModule],
+    })
+      .overrideProvider(RPC_CONFIG)
+      .useValue(rpc)
+      .compile();
+    attendance = attendanceModule.createNestMicroservice({
+      ...attendanceTcpOptions(rpc),
       logger: false,
     });
     await attendance.listen();
     const module = await Test.createTestingModule({
       imports: [AppModule, FileModule, AuthModule],
       controllers: [ParentFixtureController],
-    }).compile();
+    })
+      .overrideProvider(RPC_CONFIG)
+      .useValue(rpc)
+      .compile();
     app = module.createNestApplication<NestExpressApplication>();
     configureHttp(app, config);
     await app.init();
@@ -121,8 +135,11 @@ describe('private files HTTP and parent transactions with native MySQL', () => {
   });
 
   afterAll(async () => {
-    await app?.close();
-    await attendance?.close();
+    try {
+      await app?.close();
+    } finally {
+      await attendance?.close();
+    }
   });
 
   beforeEach(async () => {
@@ -141,6 +158,8 @@ describe('private files HTTP and parent transactions with native MySQL', () => {
   });
 
   afterEach(async () => {
+    if (!source?.isInitialized || !ids) return;
+
     await source.manager.delete(AttendanceEntity, {
       employeeId: In([ids.employee, ids.otherEmployee]),
     });

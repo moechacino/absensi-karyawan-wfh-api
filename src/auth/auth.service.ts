@@ -55,13 +55,13 @@ export class AuthService {
 
   async changePassword(actor: Actor, input: PasswordInput): Promise<void> {
     if (
-      Array.from(input.newPassword).length < 15 ||
+      Array.from(input.newPassword).length < 8 ||
       Array.from(input.newPassword).length > 128
     ) {
       throw new ProblemException(
         422,
         'PASSWORD_POLICY',
-        'Password must contain 15–128 Unicode code points',
+        'Password must contain 8–128 Unicode code points',
       );
     }
 
