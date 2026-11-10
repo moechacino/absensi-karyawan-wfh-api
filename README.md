@@ -1,5 +1,12 @@
 # WFH Attendance System
 
+LIVE APP DEMO: https://wfh-attendance.forgetmenot.id
+HR email and password: demo.hr01@example.test / Demo-Password-12345
+
+LIVE API DEMO: https://wfh-attendance-api.forgetmenot.id/
+
+API DOCS: https://documenter.getpostman.com/view/26325754/2sBYHYvdhX
+
 ## Overview
 
 A work-from-home attendance application where employees record photo-backed check-ins and check-outs, and HR manages work schedules, holidays, and attendance monitoring. This backend runs a NestJS HTTP gateway and a separate attendance microservice connected over TCP.
